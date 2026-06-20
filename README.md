@@ -1,36 +1,41 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# UCClookup — California UCC lead intelligence
 
-## Getting Started
+Next.js 16 + Tailwind + Supabase (Postgres). Three tools over California UCC +
+business-entity data: a competitor-funder lead feed, a stacking detector, and an
+owner reverse-lookup (company → owner → their other companies).
 
-First, run the development server:
+## Going live (Supabase + Vercel)
+
+**1. Create a Supabase project** (free) at https://app.supabase.com.
+
+**2. Get the connection string.** Project Settings → Database → Connection string
+→ **URI**, using the **Transaction pooler** host (`…pooler.supabase.com:6543`).
+Copy `web/.env.local.example` to `web/.env.local` and paste it into `DATABASE_URL`
+(fill in your DB password).
+
+**3. Load the data into Supabase** (one time, from your machine):
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+cd web
+npm install
+npm run load     # creates the schema + loads the California sample into Supabase
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+**4. Push to GitHub & import to Vercel.**
+- Push this `web/` folder to a GitHub repo.
+- At https://vercel.com/new import that repo.
+- Add the **`DATABASE_URL`** environment variable (same value as `.env.local`).
+- Deploy. Done — it's a live URL, no localhost.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Every push to `main` redeploys automatically.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Where things live
+- `lib/db.ts` — the Supabase connection (the one swap-point).
+- `lib/features.ts` — the three features as SQL.
+- `db/schema.sql`, `db/exclusions.sql` — schema + junk/institution filters.
+- `scripts/load-supabase.mjs` — one-time data loader (`npm run load`).
+- `app/` — dashboard, `/feed`, `/stacking`, `/search`.
 
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Updating data later
+Re-run `npm run load` (it resets and reloads). When the $100 master-unload
+files replace the sample folders, the same command loads the full history.
