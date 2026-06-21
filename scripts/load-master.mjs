@@ -108,6 +108,7 @@ const withTimeout = (p, ms, label) =>
 const STALL_TIMEOUT = +(process.env.STALL_TIMEOUT || 45000); // detect a stall in 45s
 const COOLDOWN_MS = +(process.env.COOLDOWN || 360000);       // 6 min budget refill
 const MAX_COOLDOWNS = +(process.env.MAX_COOLDOWNS || 20);
+const THROTTLE_MS = +(process.env.THROTTLE_MS || 0); // delay between batches to stay under the IPv4 ingest cap
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function copyBatch(table, cols, data) {
@@ -158,6 +159,7 @@ async function loadFile(plan, skip = 0) {
     if (batch.length >= BATCH) {
       await copyBatch(plan.table, cols, batch.join(""));
       batch = [];
+      if (THROTTLE_MS) await sleep(THROTTLE_MS); // pace under the IPv4 ingest budget
       if ((skip + loaded) % 1000000 < BATCH) console.error(`    ...${((skip + loaded) / 1e6).toFixed(1)}M rows (${plan.table})`);
     }
   }
