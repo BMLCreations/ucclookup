@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "load": "node --env-file=.env.local scripts/load-supabase.mjs"
+    "load": "node --env-file=.env.local scripts/load-supabase.mjs",
+    "load:master": "node --env-file=.env.local scripts/load-master.mjs"
   },
   "dependencies": {
     "next": "16.2.9",
