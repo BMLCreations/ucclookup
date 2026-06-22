@@ -40,6 +40,23 @@ function csvField(v) {
   return /[",\n\r]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
 }
 
+// Type-aware sanitizers. COPY into timestamptz/int hard-fails on junk like "NA",
+// and postgres.js's COPY stream swallows that error (the stream just hangs) — so we
+// must null out anything that isn't a valid value BEFORE it reaches COPY.
+const DATE_COLS = new Set(["filing_date", "processed_date", "lapse_date", "initial_filing_date", "last_si_file_date"]);
+const INT_COLS = new Set(["page_count"]);
+function sanDate(v) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(v);
+  if (!m) return ""; // empty, "NA", or any non-date -> NULL
+  const y = +m[1], mo = +m[2], d = +m[3];
+  if (y < 1900 || y > 2200 || mo < 1 || mo > 12 || d < 1 || d > 31) return "";
+  const dim = [31, (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0 ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][mo - 1];
+  if (d > dim) return ""; // calendar-invalid (e.g. Feb 30) -> NULL
+  return v;
+}
+function sanInt(v) { return /^-?\d+$/.test(v) ? v : ""; }
+function sanCol(v, col) { return DATE_COLS.has(col) ? sanDate(v) : INT_COLS.has(col) ? sanInt(v) : san(v); }
+
 // Per-file plan: source file, line splitter, and CSV-key -> db-column mapping.
 const debtorMap = [["UCC1_NUM","ucc1_num"],["UCC3_NUM","ucc3_num"],["DEBTOR_TYPE","debtor_type"],
   ["ORG_NAME","org_name"],["LAST_NAME","last_name"],["FIRST_NAME","first_name"],["MIDDLE_NAME","middle_name"],
@@ -74,13 +91,14 @@ const PLAN = [
 
 // Yields ready-to-COPY csv lines (and counts rows) for one file.
 async function* csvRows(plan, counter) {
+  const colNames = plan.map.map(([, c]) => c);
   const rl = createInterface({ input: createReadStream(plan.file), crlfDelay: Infinity });
   let idx = null;
   for await (const line of rl) {
     if (!line) continue;
     if (!idx) { const h = plan.split(line); idx = plan.map.map(([k]) => h.indexOf(k)); continue; }
     const vals = plan.split(line);
-    const out = idx.map((i) => csvField(san(i >= 0 ? (vals[i] ?? "") : "")));
+    const out = idx.map((i, j) => csvField(sanCol(i >= 0 ? (vals[i] ?? "") : "", colNames[j])));
     counter.n++;
     if (counter.n % 1000000 === 0) process.stdout.write(`    ...${(counter.n / 1e6).toFixed(0)}M rows\n`);
     yield out.join(",") + "\n";
@@ -145,7 +163,8 @@ async function runDDL(text, ms = 1800000) {
 // Stream a file and load it in chunked COPY batches, skipping `skip` data rows
 // that are already loaded (resume support).
 async function loadFile(plan, skip = 0) {
-  const cols = plan.map.map(([, c]) => c).join(",");
+  const colNames = plan.map.map(([, c]) => c);
+  const cols = colNames.join(",");
   const rl = createInterface({ input: createReadStream(plan.file), crlfDelay: Infinity });
   let idx = null, batch = [], seen = 0, loaded = 0;
   for await (const line of rl) {
@@ -154,7 +173,7 @@ async function loadFile(plan, skip = 0) {
     seen++;
     if (seen <= skip) continue; // already in the DB from a previous run
     const vals = plan.split(line);
-    batch.push(idx.map((i) => csvField(san(i >= 0 ? (vals[i] ?? "") : ""))).join(",") + "\n");
+    batch.push(idx.map((i, j) => csvField(sanCol(i >= 0 ? (vals[i] ?? "") : "", colNames[j]))).join(",") + "\n");
     loaded++;
     if (batch.length >= BATCH) {
       await copyBatch(plan.table, cols, batch.join(""));
@@ -202,8 +221,12 @@ async function main() {
   }
 
   console.error("Building indexes (one at a time)...");
+  // Strip comment lines from EACH split chunk (not just the whole string) so a
+  // leading comment can't swallow the first index statement.
   const idxStmts = readFileSync(join(WEB, "db", "02-indexes.sql"), "utf8")
-    .split(";").map((s) => s.trim()).filter((s) => s && !s.startsWith("--"));
+    .split(";")
+    .map((s) => s.split("\n").filter((l) => !l.trim().startsWith("--")).join("\n").trim())
+    .filter((s) => s.length > 0);
   for (const st of idxStmts) { console.error(`  ${st.slice(0, 64)}`); await runDDL(st); }
   console.error("Loading exclusion filters...");
   await runDDL(readFileSync(join(WEB, "db", "exclusions.sql"), "utf8"));

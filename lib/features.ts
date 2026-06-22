@@ -1,4 +1,8 @@
-// Product features as SQL over the loaded data. Plain SQL -> portable to Supabase.
+// Product features as SQL over the loaded data. Plain SQL -> portable.
+// Heavy discovery features read PRECOMPUTED summary tables (built by
+// scripts/precompute.mjs, refreshed on each data load) so pages are instant.
+// Live lookups (feed by funder, name search) hit the raw tables but use indexes
+// (functional normalize_name indexes + pg_trgm trigram indexes for LIKE '%x%').
 import { q } from './db';
 
 export type Lead = {
@@ -13,71 +17,36 @@ export type CompanyOwner = {
   last_name: string; position_type: string; city: string; state: string;
 };
 export type PersonCompanies = {
-  first: string; last: string; companies: number; company_list: string;
+  first: string; last: string; city: string; state: string;
+  companies: number; company_list: string;
 };
 
-// FEATURE 1 — competitor-funder poaching feed
+// FEATURE 1 — competitor-funder poaching feed (reads denormalized sum_leads; instant).
 export function competitorFeed(competitors: string[], ownName: string) {
   return q<Lead>(
-    `WITH funder AS (
-       SELECT ucc1_num, ucc3_num, org_name AS funder_name, normalize_name(org_name) AS funder_norm
-       FROM ucc_secured_parties WHERE org_name <> ''
-     ),
-     merchant AS (
-       SELECT ucc1_num, ucc3_num, org_name AS merchant_name, addr1, city, state, postal_code
-       FROM ucc_debtors WHERE debtor_type = 'Organization' AND org_name <> ''
-     )
-     SELECT f.filing_date::date AS filed, m.merchant_name, fn.funder_name AS funded_by,
-            m.city, m.state, m.postal_code
-     FROM ucc_filings f
-     JOIN funder fn  ON fn.ucc1_num = f.ucc1_num AND fn.ucc3_num = f.ucc3_num
-     JOIN merchant m ON m.ucc1_num  = f.ucc1_num AND m.ucc3_num  = f.ucc3_num
-     WHERE f.filing_type_id = 'UCC' AND f.action_type = 'Lien Financing Stmt'
-       AND fn.funder_norm IN (SELECT normalize_name(w) FROM unnest($1::text[]) AS w)
-       AND fn.funder_norm <> normalize_name($2)
-     ORDER BY f.filing_date DESC`,
+    `SELECT filed, merchant_name, funder_name AS funded_by, city, state, postal_code
+     FROM sum_leads
+     WHERE funder_norm IN (SELECT normalize_name(w) FROM unnest($1::text[]) AS w)
+       AND funder_norm <> normalize_name($2)
+     ORDER BY filed DESC
+     LIMIT 200`,
     [competitors, ownName],
   );
 }
 
-// FEATURE 2 — stacking detector (with junk/institution/trust filters)
+// FEATURE 2 — stacking detector (reads precomputed sum_stacked; instant).
 export function stackingDetector(minFunders: number) {
   return q<StackedMerchant>(
-    `WITH events AS (
-       SELECT ucc1_num,
-              bool_or(action_type = 'Termination') AS terminated,
-              max(lapse_date) AS eff_lapse,
-              bool_or(action_type = 'Lien Financing Stmt' AND filing_type_id = 'UCC') AS is_ucc_initial
-       FROM ucc_filings GROUP BY ucc1_num
-     ),
-     amend_term AS (SELECT DISTINCT ucc1_num FROM ucc_amendments WHERE action_type = 'Termination'),
-     active AS (
-       SELECT e.ucc1_num FROM events e
-       WHERE e.is_ucc_initial AND NOT e.terminated
-         AND e.ucc1_num NOT IN (SELECT ucc1_num FROM amend_term)
-         AND (e.eff_lapse IS NULL OR e.eff_lapse > now())
-     ),
-     lien AS (
-       SELECT a.ucc1_num, normalize_name(d.org_name) AS merchant_norm,
-              max(d.org_name) AS merchant_name, normalize_name(s.org_name) AS funder_norm
-       FROM active a
-       JOIN ucc_debtors d         ON d.ucc1_num = a.ucc1_num AND d.debtor_type = 'Organization' AND d.org_name <> ''
-       JOIN ucc_secured_parties s ON s.ucc1_num = a.ucc1_num AND s.org_name <> ''
-       WHERE NOT is_excluded(d.org_name) AND NOT is_excluded(s.org_name)
-       GROUP BY a.ucc1_num, normalize_name(d.org_name), normalize_name(s.org_name)
-     )
-     SELECT max(merchant_name) AS merchant,
-            count(DISTINCT funder_norm)::int AS distinct_funders,
-            count(DISTINCT ucc1_num)::int    AS active_liens,
-            string_agg(DISTINCT funder_norm, ', ') AS funders
-     FROM lien GROUP BY merchant_norm
-     HAVING count(DISTINCT funder_norm) >= $1
-     ORDER BY distinct_funders DESC, active_liens DESC LIMIT 100`,
+    `SELECT merchant, distinct_funders, active_liens, funders
+     FROM sum_stacked
+     WHERE distinct_funders >= $1
+     ORDER BY distinct_funders DESC, active_liens DESC
+     LIMIT 100`,
     [minFunders],
   );
 }
 
-// FEATURE 3a — company -> the people who run it
+// FEATURE 3a — company -> the people who run it (LIVE; uses be_entities trigram index).
 export function ownersOfCompany(companyTerm: string) {
   return q<CompanyOwner>(
     `SELECT e.entity_name, e.entity_type, p.first_name, p.last_name,
@@ -91,57 +60,44 @@ export function ownersOfCompany(companyTerm: string) {
   );
 }
 
-// FEATURE 3b — person -> every company they run
+// FEATURE 3b — person -> every company they run (reads RESOLVED people: er_persons).
+// Each row is one real person (name + city/state), disambiguated by address — so a
+// search for "John Smith" returns the many distinct John Smiths, not one fake blob.
 export function companiesOfPerson(personTerm: string, minCompanies = 1) {
   return q<PersonCompanies>(
-    `SELECT initcap(lower(first_name)) AS first, initcap(lower(last_name)) AS last,
-            count(DISTINCT entity_num)::int AS companies,
-            string_agg(DISTINCT entity_name, '  |  ') AS company_list
-     FROM be_principals
-     WHERE last_name <> '' AND first_name <> ''
-       AND (upper(first_name || ' ' || last_name) LIKE '%' || upper($1) || '%'
-            OR upper(last_name) LIKE '%' || upper($1) || '%')
-     GROUP BY upper(first_name), upper(last_name), initcap(lower(first_name)), initcap(lower(last_name))
-     HAVING count(DISTINCT entity_num) >= $2
+    `SELECT first, last, city, state, companies, company_list
+     FROM er_persons
+     WHERE upper(coalesce(first,'') || ' ' || coalesce(last,'')) LIKE '%' || upper($1) || '%'
+       AND companies >= $2 AND NOT professional
      ORDER BY companies DESC LIMIT 100`,
     [personTerm, minCompanies],
   );
 }
 
-// People who run multiple companies — the "owner empires" discovery list.
+// People who run multiple companies — "owner empires" (RESOLVED people: er_persons).
 export function ownerEmpires(minCompanies = 2) {
   return q<PersonCompanies>(
-    `SELECT initcap(lower(first_name)) AS first, initcap(lower(last_name)) AS last,
-            count(DISTINCT entity_num)::int AS companies,
-            string_agg(DISTINCT entity_name, '  |  ') AS company_list
-     FROM be_principals
-     WHERE last_name <> '' AND first_name <> ''
-     GROUP BY upper(first_name), upper(last_name), initcap(lower(first_name)), initcap(lower(last_name))
-     HAVING count(DISTINCT entity_num) >= $1
+    `SELECT first, last, city, state, companies, company_list
+     FROM er_persons
+     WHERE companies >= $1 AND NOT professional
      ORDER BY companies DESC LIMIT 50`,
     [minCompanies],
   );
 }
 
-// Top funders present in the data (for the feed's pick-list), excluding junk.
+// Top funders for the feed's pick-list (reads precomputed sum_funders).
 export function topFunders(limit = 30) {
   return q<{ funder: string; filings: number }>(
-    `SELECT org_name AS funder, count(*)::int AS filings
-     FROM ucc_secured_parties sp
-     JOIN ucc_filings f ON f.ucc1_num = sp.ucc1_num AND f.ucc3_num = sp.ucc3_num
-     WHERE sp.org_name <> '' AND f.filing_type_id = 'UCC'
-       AND f.action_type = 'Lien Financing Stmt' AND NOT is_excluded(sp.org_name)
-     GROUP BY org_name ORDER BY filings DESC LIMIT $1`,
+    `SELECT funder, filings FROM sum_funders ORDER BY filings DESC LIMIT $1`,
     [limit],
   );
 }
 
 export function stats() {
   return q<{ label: string; n: number }>(
-    `SELECT 'UCC filings' AS label, count(*)::int AS n FROM ucc_filings
-     UNION ALL SELECT 'Businesses (debtors)', count(DISTINCT normalize_name(org_name))::int FROM ucc_debtors WHERE debtor_type='Organization'
-     UNION ALL SELECT 'Funders', count(DISTINCT normalize_name(org_name))::int FROM ucc_secured_parties WHERE org_name<>''
-     UNION ALL SELECT 'CA companies on file', count(*)::int FROM be_entities
-     UNION ALL SELECT 'Company principals', count(*)::int FROM be_principals`,
+    `SELECT label, n::int AS n FROM sum_stats
+     ORDER BY array_position(
+       ARRAY['UCC filings','Businesses (debtors)','Funders','CA companies on file','Company principals'],
+       label)`,
   );
 }
