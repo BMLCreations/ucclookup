@@ -27,9 +27,9 @@ function SearchIcon() {
 }
 
 const features = [
-  { href: "/search", title: "Find leads", desc: "Search merchants by name, funder, or filing activity — fresh, ready-to-call.", icon: <TargetIcon /> },
-  { href: "/search?funders=3", title: "Stacked merchants", desc: "Businesses carrying advances from multiple different funders.", icon: <ChartIcon /> },
-  { href: "/search", title: "Owner & company lookup", desc: "Drill into any business or person and their full profile.", icon: <SearchIcon /> },
+  { href: "/search", title: "UCC Search", desc: "Look up a debtor, individual, or secured party by name — then open their full profile.", icon: <SearchIcon /> },
+  { href: "/leads", title: "Lead Generation", desc: "Discover prospects you don't know yet — filter by activity, leverage, and location.", icon: <TargetIcon /> },
+  { href: "/leads?funders=3", title: "Stacked merchants", desc: "Businesses carrying advances from multiple different funders.", icon: <ChartIcon /> },
 ];
 
 export default async function Home() {
@@ -46,8 +46,8 @@ export default async function Home() {
             UCC lead intelligence, ready to work.
           </h1>
           <p className="mt-3 max-w-xl text-[15px] leading-relaxed text-indigo-100">
-            The complete California UCC filing and business-ownership record set — turned into three
-            tools that surface funded merchants, over-leveraged businesses, and the people behind them.
+            The complete California UCC filing and business-ownership record set — two products:
+            look up anyone by name, or generate fresh leads by activity, leverage, and location.
           </p>
         </div>
         <div className="pointer-events-none absolute -right-16 -top-16 h-64 w-64 rounded-full bg-white/10 blur-2xl" />

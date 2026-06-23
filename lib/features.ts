@@ -115,12 +115,16 @@ const WINDOW_COL: Record<SearchWindow, string> = {
 };
 
 // Unified business search: name (company/debtor) + funder (secured party) +
-// minimum # of UCC filings within a date window. Filters AND together.
+// minimum # of UCC filings within a date window + geography. Filters AND together.
+// Used by UCC Search (name-led lookup) and Lead Gen (filter-led discovery, no name/funder).
 export function searchBusinesses(opts: {
-  name?: string; funder?: string; minFilings?: number; minFunders?: number; window?: SearchWindow;
+  name?: string; funder?: string; minFilings?: number; minFunders?: number;
+  window?: SearchWindow; state?: string; city?: string;
 }) {
   const name = (opts.name ?? "").trim();
   const funder = (opts.funder ?? "").trim();
+  const state = (opts.state ?? "").trim();
+  const city = (opts.city ?? "").trim();
   const minFilings = Math.max(1, Number(opts.minFilings) || 1);
   const minFunders = Math.max(0, Number(opts.minFunders) || 0); // stacking signal (distinct funders)
   const col = WINDOW_COL[opts.window ?? "all"] ?? "ucc_count"; // whitelisted, safe to interpolate
@@ -134,9 +138,11 @@ export function searchBusinesses(opts: {
        AND ($3 = '' OR biz_norm IN (
              SELECT normalize_name(merchant_name) FROM sum_leads
              WHERE funder_norm = normalize_name($3)))
+       AND ($5 = '' OR upper(state) = upper($5))
+       AND ($6 = '' OR city ILIKE '%' || $6 || '%')
      ORDER BY ${col} DESC, distinct_funders DESC
      LIMIT 200`,
-    [minFilings, name, funder, minFunders],
+    [minFilings, name, funder, minFunders, state, city],
   );
 }
 
@@ -147,11 +153,15 @@ export type IndividualRow = {
 };
 
 // Unified individual search: people who are UCC debtors/guarantors, by name +
-// minimum # of their OWN UCC filings within a date window. Filters AND together.
+// minimum # of their OWN UCC filings within a date window + geography. Filters AND.
+// Used by UCC Search (name-led lookup) and Lead Gen (filter-led discovery, no name).
 export function searchIndividuals(opts: {
-  name?: string; minFilings?: number; minFunders?: number; window?: SearchWindow;
+  name?: string; minFilings?: number; minFunders?: number;
+  window?: SearchWindow; state?: string; city?: string;
 }) {
   const name = (opts.name ?? "").trim();
+  const state = (opts.state ?? "").trim();
+  const city = (opts.city ?? "").trim();
   const minFilings = Math.max(1, Number(opts.minFilings) || 1);
   const minFunders = Math.max(0, Number(opts.minFunders) || 0);
   const col = WINDOW_COL[opts.window ?? "all"] ?? "ucc_count";
@@ -161,9 +171,11 @@ export function searchIndividuals(opts: {
      FROM prof_individual
      WHERE ${col} >= $1 AND distinct_funders >= $3
        AND ($2 = '' OR person_name ILIKE '%' || $2 || '%')
+       AND ($4 = '' OR upper(state) = upper($4))
+       AND ($5 = '' OR city ILIKE '%' || $5 || '%')
      ORDER BY ${col} DESC, distinct_funders DESC
      LIMIT 200`,
-    [minFilings, name, minFunders],
+    [minFilings, name, minFunders, state, city],
   );
 }
 

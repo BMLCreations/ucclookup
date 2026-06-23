@@ -4,7 +4,8 @@ import { usePathname } from "next/navigation";
 
 const links = [
   { href: "/", label: "Dashboard" },
-  { href: "/search", label: "Search" },
+  { href: "/search", label: "UCC Search" },
+  { href: "/leads", label: "Lead Gen" },
 ];
 
 export function NavBar() {
