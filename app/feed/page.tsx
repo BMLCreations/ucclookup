@@ -40,7 +40,7 @@ export default async function FeedPage({
             name="own"
             defaultValue={own}
             placeholder="Your own company (to exclude)"
-            className="min-w-[220px] rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
+            className="min-w-[240px] rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100"
           />
         }
       />
@@ -52,7 +52,7 @@ export default async function FeedPage({
 
       <DataTable<Lead>
         rows={leads}
-        empty="No leads for those funders in the sample week. Try a name from the funder list below."
+        empty="No recent leads for those funders. Try a name from the funder list below."
         columns={[
           { key: "filed", label: "Filed" },
           { key: "merchant_name", label: "Merchant (lead)", className: "font-medium text-slate-900" },

@@ -43,7 +43,7 @@ export default async function StackingPage({
 
       <DataTable<StackedMerchant>
         rows={rows}
-        empty="No merchants hit this threshold in the one-week sample — full history (the $100 master unload) is where real stacking appears."
+        empty="No merchants hit this threshold. Try lowering the minimum number of funders."
         columns={[
           { key: "merchant", label: "Merchant", className: "font-medium text-slate-900" },
           { key: "distinct_funders", label: "Funders", className: "text-center" },
@@ -56,9 +56,11 @@ export default async function StackingPage({
         ]}
       />
 
-      <p className="mt-6 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
-        Note: this is one sample week. A single week rarely shows one business taking 3+ advances. With
-        California&apos;s full history loaded, this list becomes a powerful book of over-leveraged merchants.
+      <p className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-3.5 text-xs leading-relaxed text-slate-500">
+        <span className="font-semibold text-slate-700">How this works:</span> a lien counts as active when it
+        isn&apos;t terminated or lapsed. We count distinct funders per merchant and exclude banks, card
+        networks, payment processors, trusts, and known junk filers — so what&apos;s left is real
+        over-leveraged businesses.
       </p>
     </div>
   );
