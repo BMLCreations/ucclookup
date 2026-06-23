@@ -191,8 +191,8 @@ export function businessHeadline(bizNorm: string) {
 export type BizFiling = { filed: string; action: string; funder: string; lapse: string };
 export function businessFilings(bizNorm: string) {
   return q<BizFiling>(
-    `SELECT f.filing_date::text AS filed, f.action_type AS action,
-            coalesce(sp.org_name, '') AS funder, f.lapse_date::text AS lapse
+    `SELECT f.filing_date::date::text AS filed, f.action_type AS action,
+            coalesce(sp.org_name, '') AS funder, f.lapse_date::date::text AS lapse
      FROM ucc_debtors d
      JOIN ucc_filings f ON f.ucc1_num = d.ucc1_num AND f.ucc3_num = d.ucc3_num
      LEFT JOIN ucc_secured_parties sp ON sp.ucc1_num = d.ucc1_num AND sp.ucc3_num = d.ucc3_num AND sp.org_name <> ''
@@ -231,8 +231,8 @@ export function personHeadline(personKey: string) {
 export function personFilings(personKey: string) {
   const [nameNorm = "", city = "", state = ""] = personKey.split("|");
   return q<BizFiling>(
-    `SELECT f.filing_date::text AS filed, f.action_type AS action,
-            coalesce(sp.org_name, '') AS funder, f.lapse_date::text AS lapse
+    `SELECT f.filing_date::date::text AS filed, f.action_type AS action,
+            coalesce(sp.org_name, '') AS funder, f.lapse_date::date::text AS lapse
      FROM ucc_debtors d
      JOIN ucc_filings f ON f.ucc1_num = d.ucc1_num AND f.ucc3_num = d.ucc3_num
      LEFT JOIN ucc_secured_parties sp ON sp.ucc1_num = d.ucc1_num AND sp.ucc3_num = d.ucc3_num AND sp.org_name <> ''
