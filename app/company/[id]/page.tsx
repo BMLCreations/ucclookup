@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { DataTable, Stat } from "../../components";
+import { DataTable, Stat, Collapsible } from "../../components";
 import {
   businessHeadline, businessFilings, businessPrincipals,
   type BizFiling, type BizPrincipal,
@@ -45,34 +45,35 @@ export default async function CompanyProfile({ params }: { params: Promise<{ id:
         <Stat label="Last filing" value={head.last_filing ?? "—"} />
       </div>
 
-      <section className="mb-10">
-        <h2 className="mb-3 text-sm font-semibold text-slate-700">UCC filing history</h2>
-        <DataTable<BizFiling>
-          rows={filings}
-          empty="No UCC filings."
-          columns={[
-            { key: "filed", label: "Filed" },
-            { key: "action", label: "Type" },
-            { key: "funder", label: "Funded by", className: "font-medium text-slate-900" },
-            { key: "lapse", label: "Lapses" },
-          ]}
-        />
-      </section>
+      <div className="space-y-3">
+        <Collapsible title="UCC filing history" count={filings.length}>
+          <DataTable<BizFiling>
+            rows={filings}
+            empty="No UCC filings."
+            columns={[
+              { key: "filed", label: "Filed" },
+              { key: "action", label: "Type" },
+              { key: "funder", label: "Funded by", className: "font-medium text-slate-900" },
+              { key: "lapse", label: "Lapses" },
+            ]}
+          />
+        </Collapsible>
 
-      <section>
-        <h2 className="mb-3 text-sm font-semibold text-slate-700">
-          People on this business <span className="font-normal text-slate-400">· from the California business registry</span>
-        </h2>
-        <DataTable<BizPrincipal>
-          rows={principals}
-          empty="No matching registry record (this business may file under a different legal name)."
-          columns={[
-            { key: "name", label: "Person", className: "font-medium text-slate-900" },
-            { key: "role", label: "Role" },
-            { key: "entity_name", label: "Registered entity", render: (r) => <span className="text-slate-500">{r.entity_name}</span> },
-          ]}
-        />
-      </section>
+        <Collapsible
+          title={<>People on this business <span className="font-normal text-slate-400">· from the CA business registry</span></>}
+          count={principals.length}
+        >
+          <DataTable<BizPrincipal>
+            rows={principals}
+            empty="No matching registry record (this business may file under a different legal name)."
+            columns={[
+              { key: "name", label: "Person", className: "font-medium text-slate-900" },
+              { key: "role", label: "Role" },
+              { key: "entity_name", label: "Registered entity", render: (r) => <span className="text-slate-500">{r.entity_name}</span> },
+            ]}
+          />
+        </Collapsible>
+      </div>
     </div>
   );
 }
