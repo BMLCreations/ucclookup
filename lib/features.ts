@@ -101,3 +101,74 @@ export function stats() {
        label)`,
   );
 }
+
+// ── Unified search (Phase 2) ───────────────────────────────────────────────
+export type BusinessRow = {
+  biz_norm: string; biz_name: string; city: string; state: string;
+  ucc_count: number; ucc_6mo: number; ucc_12mo: number;
+  last_filing: string; distinct_funders: number;
+};
+
+export type SearchWindow = "all" | "3mo" | "6mo" | "12mo";
+const WINDOW_COL: Record<SearchWindow, string> = {
+  all: "ucc_count", "3mo": "ucc_3mo", "6mo": "ucc_6mo", "12mo": "ucc_12mo",
+};
+
+// Unified business search: name (company/debtor) + funder (secured party) +
+// minimum # of UCC filings within a date window. Filters AND together.
+export function searchBusinesses(opts: {
+  name?: string; funder?: string; minFilings?: number; window?: SearchWindow;
+}) {
+  const name = (opts.name ?? "").trim();
+  const funder = (opts.funder ?? "").trim();
+  const minFilings = Math.max(1, Number(opts.minFilings) || 1);
+  const col = WINDOW_COL[opts.window ?? "all"] ?? "ucc_count"; // whitelisted, safe to interpolate
+  return q<BusinessRow>(
+    `SELECT biz_norm, biz_name, city, state, ucc_count, ucc_6mo, ucc_12mo,
+            last_filing::text AS last_filing, distinct_funders
+     FROM prof_business
+     WHERE ${col} >= $1
+       AND ($2 = '' OR biz_name ILIKE '%' || $2 || '%')
+       AND ($3 = '' OR biz_norm IN (
+             SELECT normalize_name(merchant_name) FROM sum_leads
+             WHERE funder_norm = normalize_name($3)))
+     ORDER BY ${col} DESC, ucc_count DESC
+     LIMIT 200`,
+    [minFilings, name, funder],
+  );
+}
+
+// ── Company profile (Phase 3) ──────────────────────────────────────────────
+export function businessHeadline(bizNorm: string) {
+  return q<BusinessRow>(
+    `SELECT biz_norm, biz_name, city, state, ucc_count, ucc_6mo, ucc_12mo,
+            last_filing::text AS last_filing, distinct_funders
+     FROM prof_business WHERE biz_norm = $1 LIMIT 1`,
+    [bizNorm],
+  );
+}
+export type BizFiling = { filed: string; action: string; funder: string; lapse: string };
+export function businessFilings(bizNorm: string) {
+  return q<BizFiling>(
+    `SELECT f.filing_date::text AS filed, f.action_type AS action,
+            coalesce(sp.org_name, '') AS funder, f.lapse_date::text AS lapse
+     FROM ucc_debtors d
+     JOIN ucc_filings f ON f.ucc1_num = d.ucc1_num AND f.ucc3_num = d.ucc3_num
+     LEFT JOIN ucc_secured_parties sp ON sp.ucc1_num = d.ucc1_num AND sp.ucc3_num = d.ucc3_num AND sp.org_name <> ''
+     WHERE d.debtor_type = 'Organization' AND normalize_name(d.org_name) = $1 AND f.filing_type_id = 'UCC'
+     ORDER BY f.filing_date DESC LIMIT 300`,
+    [bizNorm],
+  );
+}
+export type BizPrincipal = { name: string; role: string; entity_name: string };
+export function businessPrincipals(bizNorm: string) {
+  return q<BizPrincipal>(
+    `SELECT DISTINCT initcap(lower(p.first_name || ' ' || p.last_name)) AS name,
+            p.position_type AS role, e.entity_name
+     FROM be_entities e
+     JOIN be_principals p ON p.entity_num = e.entity_num
+     WHERE normalize_name(e.entity_name) = $1 AND p.last_name <> ''
+     ORDER BY e.entity_name, name LIMIT 100`,
+    [bizNorm],
+  );
+}

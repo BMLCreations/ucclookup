@@ -102,7 +102,12 @@ async function main() {
     await SQL`INSERT INTO loaded_weeks (source, rows) VALUES (${key}, ${total})`;
     console.error(`  recorded "${key}" in loaded_weeks (${total.toLocaleString()} rows)`);
   }
-  console.error("\nDONE ✅");
+  // Refresh planner statistics — appends invalidate them and cause slow scans otherwise.
+  console.error("\nRefreshing statistics (ANALYZE)...");
+  for (const t of ["ucc_filings", "ucc_debtors", "ucc_secured_parties", "ucc_amendments", "be_entities", "be_principals", "be_agents"]) {
+    await SQL.unsafe(`ANALYZE ${t}`);
+  }
+  console.error("DONE ✅");
   await SQL.end();
 }
 main().catch(async (e) => { console.error("FATAL:", e.message); try { await SQL.end(); } catch {} process.exit(1); });
