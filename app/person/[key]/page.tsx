@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { DataTable, Stat } from "../../components";
+import { DataTable, Stat, Collapsible } from "../../components";
 import {
   personHeadline, personFilings, personCompanies,
   type BizFiling, type PersonCompany,
@@ -45,38 +45,38 @@ export default async function PersonProfile({ params }: { params: Promise<{ key:
         <Stat label="Last filing" value={head.last_filing ?? "—"} />
       </div>
 
-      <section className="mb-10">
-        <h2 className="mb-3 text-sm font-semibold text-slate-700">UCC filing history</h2>
-        <DataTable<BizFiling>
-          rows={filings}
-          empty="No UCC filings."
-          columns={[
-            { key: "filed", label: "Filed" },
-            { key: "action", label: "Type" },
-            { key: "funder", label: "Funded by", className: "font-medium text-slate-900" },
-            { key: "lapse", label: "Lapses" },
-          ]}
-        />
-      </section>
+      <div className="space-y-3">
+        <Collapsible title="UCC filing history" count={filings.length}>
+          <DataTable<BizFiling>
+            rows={filings}
+            empty="No UCC filings."
+            columns={[
+              { key: "filed", label: "Filed" },
+              { key: "action", label: "Type" },
+              { key: "funder", label: "Funded by", className: "font-medium text-slate-900" },
+              { key: "lapse", label: "Lapses" },
+            ]}
+          />
+        </Collapsible>
 
-      <section>
-        <h2 className="mb-3 text-sm font-semibold text-slate-700">
-          Companies linked to this person{" "}
-          <span className="font-normal text-slate-400">· by name{location && " + city"}, from the California business registry</span>
-        </h2>
-        <DataTable<PersonCompany>
-          rows={companies}
-          empty="No matching registry companies."
-          columns={[
-            { key: "entity_name", label: "Company", className: "font-medium", render: (r) => (
-                <Link href={`/company/${encodeURIComponent(r.biz_norm)}`} className="font-medium text-indigo-700 hover:underline">{r.entity_name}</Link>
-              ) },
-            { key: "entity_type", label: "Type", render: (r) => <span className="text-slate-500">{r.entity_type || "—"}</span> },
-            { key: "role", label: "Role" },
-            { key: "city", label: "Location", render: (r) => [r.city, r.state].filter(Boolean).join(", ") || "—" },
-          ]}
-        />
-      </section>
+        <Collapsible
+          title={<>Companies linked to this person <span className="font-normal text-slate-400">· by name{location && " + city"}</span></>}
+          count={companies.length}
+        >
+          <DataTable<PersonCompany>
+            rows={companies}
+            empty="No matching registry companies."
+            columns={[
+              { key: "entity_name", label: "Company", className: "font-medium", render: (r) => (
+                  <Link href={`/company/${encodeURIComponent(r.biz_norm)}`} className="font-medium text-indigo-700 hover:underline">{r.entity_name}</Link>
+                ) },
+              { key: "entity_type", label: "Type", render: (r) => <span className="text-slate-500">{r.entity_type || "—"}</span> },
+              { key: "role", label: "Role" },
+              { key: "city", label: "Location", render: (r) => [r.city, r.state].filter(Boolean).join(", ") || "—" },
+            ]}
+          />
+        </Collapsible>
+      </div>
     </div>
   );
 }

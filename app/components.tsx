@@ -95,6 +95,37 @@ export function DataTable<T extends Record<string, unknown>>({
   );
 }
 
+// Collapsible section — native <details>, no client JS. Collapsed by default;
+// the summary row is the clickable header (chevron rotates, View/Hide toggles).
+export function Collapsible({
+  title,
+  count,
+  defaultOpen = false,
+  children,
+}: {
+  title: React.ReactNode;
+  count?: number;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <details className="group" open={defaultOpen}>
+      <summary className="flex cursor-pointer list-none items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 [&::-webkit-details-marker]:hidden">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 text-slate-400 transition-transform duration-200 group-open:rotate-90">
+          <path d="M7 5l6 5-6 5" />
+        </svg>
+        <span>{title}</span>
+        {count != null && (
+          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500">{count}</span>
+        )}
+        <span className="ml-auto text-xs font-normal text-slate-400 group-open:hidden">View</span>
+        <span className="ml-auto hidden text-xs font-normal text-slate-400 group-open:inline">Hide</span>
+      </summary>
+      <div className="mt-3">{children}</div>
+    </details>
+  );
+}
+
 export function Stat({ label, value }: { label: string; value: string | number }) {
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-slate-300">
