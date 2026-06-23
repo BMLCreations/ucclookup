@@ -66,7 +66,9 @@ export default async function SearchPage({
             rows={individuals}
             empty="No individuals match that name."
             columns={[
-              { key: "person_name", label: "Individual", className: "font-medium text-slate-900" },
+              { key: "person_name", label: "Individual", className: "font-medium", render: (r) => (
+                  <Link href={`/person/${encodeURIComponent(r.person_key)}`} className="font-medium text-indigo-700 hover:underline">{r.person_name}</Link>
+                ) },
               { key: "city", label: "Location", render: (r) => [r.city, r.state].filter(Boolean).join(", ") || "—" },
               { key: "ucc_count", label: "Filings", className: "text-center nums" },
               { key: "distinct_funders", label: "Funders", className: "text-center nums" },

@@ -213,3 +213,56 @@ export function businessPrincipals(bizNorm: string) {
     [bizNorm],
   );
 }
+
+// ── Individual / person profile (Phase 3b) ─────────────────────────────────
+// A person is identified by prof_individual.person_key = NAME_NORM|CITY|STATE
+// (uppercased; CITY/STATE empty-string when unknown). All three lookups below
+// split that key so they target the same name + place consistently.
+export function personHeadline(personKey: string) {
+  return q<IndividualRow>(
+    `SELECT person_key, person_name, city, state, ucc_count, ucc_6mo, ucc_12mo,
+            last_filing::text AS last_filing, distinct_funders
+     FROM prof_individual WHERE person_key = $1 LIMIT 1`,
+    [personKey],
+  );
+}
+
+// Every UCC filing where this individual is the debtor/guarantor.
+export function personFilings(personKey: string) {
+  const [nameNorm = "", city = "", state = ""] = personKey.split("|");
+  return q<BizFiling>(
+    `SELECT f.filing_date::text AS filed, f.action_type AS action,
+            coalesce(sp.org_name, '') AS funder, f.lapse_date::text AS lapse
+     FROM ucc_debtors d
+     JOIN ucc_filings f ON f.ucc1_num = d.ucc1_num AND f.ucc3_num = d.ucc3_num
+     LEFT JOIN ucc_secured_parties sp ON sp.ucc1_num = d.ucc1_num AND sp.ucc3_num = d.ucc3_num AND sp.org_name <> ''
+     WHERE d.debtor_type = 'Individual' AND f.filing_type_id = 'UCC'
+       AND upper(btrim(d.first_name)) || ' ' || upper(btrim(d.last_name)) = $1
+       AND coalesce(nullif(upper(btrim(d.city)),''),'')  = $2
+       AND coalesce(nullif(upper(btrim(d.state)),''),'') = $3
+     ORDER BY f.filing_date DESC LIMIT 300`,
+    [nameNorm, city, state],
+  );
+}
+
+export type PersonCompany = { biz_norm: string; entity_name: string; entity_type: string; role: string; city: string; state: string };
+// California companies this person appears on as a principal (matched by name,
+// constrained to the same city when known to cut down on common-name collisions).
+// biz_norm = normalize_name(entity_name) so we can link straight to the company
+// profile (which is keyed the same way); it 404s gracefully if that company never
+// appeared as a UCC debtor.
+export function personCompanies(personKey: string) {
+  const [nameNorm = "", city = ""] = personKey.split("|");
+  return q<PersonCompany>(
+    `SELECT DISTINCT normalize_name(e.entity_name) AS biz_norm,
+            e.entity_name, e.entity_type, p.position_type AS role,
+            coalesce(nullif(p.city,''),'') AS city, coalesce(nullif(p.state,''),'') AS state
+     FROM be_principals p
+     JOIN be_entities e ON e.entity_num = p.entity_num
+     WHERE upper(btrim(p.first_name)) || ' ' || upper(btrim(p.last_name)) = $1
+       AND p.last_name <> ''
+       AND ($2 = '' OR upper(btrim(p.city)) = $2)
+     ORDER BY e.entity_name LIMIT 100`,
+    [nameNorm, city],
+  );
+}
