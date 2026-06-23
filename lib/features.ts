@@ -188,18 +188,94 @@ export function businessHeadline(bizNorm: string) {
     [bizNorm],
   );
 }
-export type BizFiling = { filed: string; action: string; funder: string; lapse: string };
+export type BizFiling = {
+  filed: string; funder: string; funder_loc: string | null;
+  status: string; lapse: string; debtor_addr: string | null; filing_num: string;
+};
+
+// Enriched lien row, DEDUPED to one row per filing (a debtor is often listed
+// several times on one filing with address-spelling variants). Per row: the
+// funder (first secured party) + its location, the lien's live status across its
+// whole lifecycle by ucc1_num (Terminated > Lapsed-by-date > Active), the
+// continued lapse date, the debtor address on that filing, and the filing number.
+function filingSql(where: string): string {
+  return `
+    SELECT filed, funder, funder_loc, debtor_addr, filing_num, status, lapse FROM (
+      SELECT DISTINCT ON (f.ucc1_num)
+        f.filing_date AS fd,
+        f.filing_date::date::text AS filed,
+        coalesce(sp.org_name, '') AS funder,
+        nullif(btrim(coalesce(nullif(sp.city,''),'') ||
+          CASE WHEN nullif(sp.state,'') IS NOT NULL THEN ', ' || sp.state ELSE '' END), ',') AS funder_loc,
+        nullif(btrim(coalesce(nullif(d.addr1,''),'') ||
+          CASE WHEN nullif(d.city,'') IS NOT NULL THEN ', ' || d.city ELSE '' END), ',') AS debtor_addr,
+        f.ucc1_num AS filing_num,
+        CASE WHEN life.terminated THEN 'Terminated'
+             WHEN coalesce(life.max_lapse, f.lapse_date) < now() THEN 'Lapsed'
+             ELSE 'Active' END AS status,
+        coalesce(life.max_lapse, f.lapse_date)::date::text AS lapse
+      FROM ucc_debtors d
+      JOIN ucc_filings f ON f.ucc1_num = d.ucc1_num AND f.ucc3_num = d.ucc3_num
+      LEFT JOIN LATERAL (
+        SELECT s.org_name, s.city, s.state FROM ucc_secured_parties s
+        WHERE s.ucc1_num = f.ucc1_num AND s.ucc3_num = f.ucc3_num AND s.org_name <> ''
+        ORDER BY s.org_name LIMIT 1
+      ) sp ON true
+      LEFT JOIN LATERAL (
+        SELECT bool_or(a.action_type = 'Termination') AS terminated, max(a.lapse_date) AS max_lapse
+        FROM ucc_filings a WHERE a.ucc1_num = f.ucc1_num AND a.filing_type_id = 'UCC'
+      ) life ON true
+      WHERE ${where} AND f.action_type = 'Lien Financing Stmt'
+      ORDER BY f.ucc1_num
+    ) x ORDER BY fd DESC LIMIT 300`;
+}
+
 export function businessFilings(bizNorm: string) {
   return q<BizFiling>(
-    `SELECT f.filing_date::date::text AS filed, f.action_type AS action,
-            coalesce(sp.org_name, '') AS funder, f.lapse_date::date::text AS lapse
-     FROM ucc_debtors d
-     JOIN ucc_filings f ON f.ucc1_num = d.ucc1_num AND f.ucc3_num = d.ucc3_num
-     LEFT JOIN ucc_secured_parties sp ON sp.ucc1_num = d.ucc1_num AND sp.ucc3_num = d.ucc3_num AND sp.org_name <> ''
-     WHERE d.debtor_type = 'Organization' AND normalize_name(d.org_name) = $1 AND f.filing_type_id = 'UCC'
-     ORDER BY f.filing_date DESC LIMIT 300`,
+    filingSql(`d.debtor_type = 'Organization' AND normalize_name(d.org_name) = $1 AND f.filing_type_id = 'UCC'`),
     [bizNorm],
   );
+}
+
+// Tax liens (state + federal) and judgment liens against a debtor — separate
+// filing types we load but don't show in the UCC history. A distress signal.
+export type LienRow = { filed: string; lien_type: string; claimant: string; status: string };
+function lienSql(where: string): string {
+  return `
+    SELECT filed, lien_type, claimant, status FROM (
+      SELECT DISTINCT ON (f.ucc1_num)
+        f.filing_date AS fd,
+        f.filing_date::date::text AS filed,
+        CASE f.filing_type_id
+          WHEN 'Notice of State Tax Lien'   THEN 'State tax lien'
+          WHEN 'Notice of Federal Tax Lien' THEN 'Federal tax lien'
+          WHEN 'Judgment Lien'              THEN 'Judgment'
+          ELSE f.filing_type_id END AS lien_type,
+        coalesce(sp.org_name, '') AS claimant,
+        CASE WHEN life.terminated THEN 'Terminated'
+             WHEN coalesce(life.max_lapse, f.lapse_date) IS NOT NULL
+                  AND coalesce(life.max_lapse, f.lapse_date) < now() THEN 'Lapsed'
+             ELSE 'Active' END AS status
+      FROM ucc_debtors d
+      JOIN ucc_filings f ON f.ucc1_num = d.ucc1_num AND f.ucc3_num = d.ucc3_num
+      LEFT JOIN LATERAL (
+        SELECT s.org_name FROM ucc_secured_parties s
+        WHERE s.ucc1_num = f.ucc1_num AND s.ucc3_num = f.ucc3_num AND s.org_name <> ''
+        ORDER BY s.org_name LIMIT 1
+      ) sp ON true
+      LEFT JOIN LATERAL (
+        SELECT bool_or(a.action_type = 'Termination') AS terminated, max(a.lapse_date) AS max_lapse
+        FROM ucc_filings a WHERE a.ucc1_num = f.ucc1_num AND a.filing_type_id = f.filing_type_id
+      ) life ON true
+      WHERE ${where}
+        AND f.filing_type_id IN ('Notice of State Tax Lien','Notice of Federal Tax Lien','Judgment Lien')
+        AND f.action_type = 'Lien Financing Stmt'
+      ORDER BY f.ucc1_num
+    ) x ORDER BY fd DESC LIMIT 100`;
+}
+
+export function businessLiens(bizNorm: string) {
+  return q<LienRow>(lienSql(`d.debtor_type = 'Organization' AND normalize_name(d.org_name) = $1`), [bizNorm]);
 }
 export type BizPrincipal = { name: string; role: string; entity_name: string };
 export function businessPrincipals(bizNorm: string) {
@@ -228,19 +304,23 @@ export function personHeadline(personKey: string) {
 }
 
 // Every UCC filing where this individual is the debtor/guarantor.
+const PERSON_MATCH = `
+  upper(btrim(d.first_name)) || ' ' || upper(btrim(d.last_name)) = $1
+  AND coalesce(nullif(upper(btrim(d.city)),''),'')  = $2
+  AND coalesce(nullif(upper(btrim(d.state)),''),'') = $3`;
+
 export function personFilings(personKey: string) {
   const [nameNorm = "", city = "", state = ""] = personKey.split("|");
   return q<BizFiling>(
-    `SELECT f.filing_date::date::text AS filed, f.action_type AS action,
-            coalesce(sp.org_name, '') AS funder, f.lapse_date::date::text AS lapse
-     FROM ucc_debtors d
-     JOIN ucc_filings f ON f.ucc1_num = d.ucc1_num AND f.ucc3_num = d.ucc3_num
-     LEFT JOIN ucc_secured_parties sp ON sp.ucc1_num = d.ucc1_num AND sp.ucc3_num = d.ucc3_num AND sp.org_name <> ''
-     WHERE d.debtor_type = 'Individual' AND f.filing_type_id = 'UCC'
-       AND upper(btrim(d.first_name)) || ' ' || upper(btrim(d.last_name)) = $1
-       AND coalesce(nullif(upper(btrim(d.city)),''),'')  = $2
-       AND coalesce(nullif(upper(btrim(d.state)),''),'') = $3
-     ORDER BY f.filing_date DESC LIMIT 300`,
+    filingSql(`d.debtor_type = 'Individual' AND f.filing_type_id = 'UCC' AND ${PERSON_MATCH}`),
+    [nameNorm, city, state],
+  );
+}
+
+export function personLiens(personKey: string) {
+  const [nameNorm = "", city = "", state = ""] = personKey.split("|");
+  return q<LienRow>(
+    lienSql(`d.debtor_type = 'Individual' AND ${PERSON_MATCH}`),
     [nameNorm, city, state],
   );
 }

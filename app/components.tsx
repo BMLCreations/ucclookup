@@ -126,11 +126,26 @@ export function Collapsible({
   );
 }
 
-export function Stat({ label, value }: { label: string; value: string | number }) {
+export function Stat({ label, value, tone = "default" }: { label: string; value: string | number; tone?: "default" | "warn" }) {
+  const warn = tone === "warn";
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-slate-300">
-      <div className="nums text-[26px] font-semibold leading-none tracking-tight text-slate-900">{value}</div>
-      <div className="mt-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">{label}</div>
+    <div className={`rounded-xl border p-5 shadow-sm transition ${warn ? "border-amber-300 bg-amber-50" : "border-slate-200 bg-white hover:border-slate-300"}`}>
+      <div className={`nums text-[26px] font-semibold leading-none tracking-tight ${warn ? "text-amber-700" : "text-slate-900"}`}>{value}</div>
+      <div className={`mt-2 text-[11px] font-semibold uppercase tracking-wider ${warn ? "text-amber-600" : "text-slate-400"}`}>{label}</div>
     </div>
+  );
+}
+
+// Lien status pill — Active (green) / Lapsed (slate) / Terminated (slate, muted).
+export function StatusPill({ status }: { status: string }) {
+  const tones: Record<string, string> = {
+    Active: "bg-emerald-50 text-emerald-700 ring-emerald-600/20",
+    Lapsed: "bg-slate-100 text-slate-600 ring-slate-500/20",
+    Terminated: "bg-slate-100 text-slate-400 ring-slate-400/20",
+  };
+  return (
+    <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${tones[status] ?? tones.Lapsed}`}>
+      {status}
+    </span>
   );
 }
