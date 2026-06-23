@@ -140,6 +140,33 @@ export function searchBusinesses(opts: {
   );
 }
 
+export type IndividualRow = {
+  person_key: string; person_name: string; city: string; state: string;
+  ucc_count: number; ucc_6mo: number; ucc_12mo: number;
+  last_filing: string; distinct_funders: number;
+};
+
+// Unified individual search: people who are UCC debtors/guarantors, by name +
+// minimum # of their OWN UCC filings within a date window. Filters AND together.
+export function searchIndividuals(opts: {
+  name?: string; minFilings?: number; minFunders?: number; window?: SearchWindow;
+}) {
+  const name = (opts.name ?? "").trim();
+  const minFilings = Math.max(1, Number(opts.minFilings) || 1);
+  const minFunders = Math.max(0, Number(opts.minFunders) || 0);
+  const col = WINDOW_COL[opts.window ?? "all"] ?? "ucc_count";
+  return q<IndividualRow>(
+    `SELECT person_key, person_name, city, state, ucc_count, ucc_6mo, ucc_12mo,
+            last_filing::text AS last_filing, distinct_funders
+     FROM prof_individual
+     WHERE ${col} >= $1 AND distinct_funders >= $3
+       AND ($2 = '' OR person_name ILIKE '%' || $2 || '%')
+     ORDER BY ${col} DESC, distinct_funders DESC
+     LIMIT 200`,
+    [minFilings, name, minFunders],
+  );
+}
+
 // ── Company profile (Phase 3) ──────────────────────────────────────────────
 export function businessHeadline(bizNorm: string) {
   return q<BusinessRow>(

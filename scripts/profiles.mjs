@@ -63,5 +63,46 @@ try {
 
   const c = await sql`SELECT count(*)::int n, max(ucc_count) mx FROM prof_business`;
   log(`prof_business: ${c[0].n.toLocaleString()} businesses, max filings on one = ${c[0].mx}`);
+
+  // Per-INDIVIDUAL debtor stats (people who appear as individual debtors / guarantors
+  // on UCC filings). Grouped by name + city/state. Powers the individual search.
+  if (REFRESH || !(await exists("prof_individual"))) {
+    await sql.unsafe("DROP TABLE IF EXISTS prof_individual");
+    await step("prof_individual", `
+      CREATE TABLE prof_individual AS
+      WITH liens AS (
+        SELECT d.ucc1_num,
+               upper(btrim(d.first_name)) || ' ' || upper(btrim(d.last_name)) AS name_norm,
+               initcap(lower(btrim(d.first_name) || ' ' || btrim(d.last_name))) AS person_name,
+               nullif(upper(btrim(d.city)),'')  AS city,
+               nullif(upper(btrim(d.state)),'') AS state,
+               f.filing_date,
+               normalize_name(sp.org_name) AS funder_norm
+        FROM ucc_debtors d
+        JOIN ucc_filings f ON f.ucc1_num = d.ucc1_num AND f.ucc3_num = d.ucc3_num
+             AND f.filing_type_id='UCC' AND f.action_type='Lien Financing Stmt'
+        LEFT JOIN ucc_secured_parties sp ON sp.ucc1_num = d.ucc1_num AND sp.ucc3_num = d.ucc3_num AND sp.org_name<>''
+        WHERE d.debtor_type='Individual' AND btrim(d.first_name)<>'' AND btrim(d.last_name)<>''
+      )
+      SELECT name_norm || '|' || coalesce(city,'') || '|' || coalesce(state,'') AS person_key,
+             max(person_name) AS person_name, city, state,
+             count(DISTINCT ucc1_num)::int AS ucc_count,
+             count(DISTINCT ucc1_num) FILTER (WHERE filing_date > now()-interval '3 months')::int  AS ucc_3mo,
+             count(DISTINCT ucc1_num) FILTER (WHERE filing_date > now()-interval '6 months')::int  AS ucc_6mo,
+             count(DISTINCT ucc1_num) FILTER (WHERE filing_date > now()-interval '12 months')::int AS ucc_12mo,
+             max(filing_date)::date AS last_filing,
+             count(DISTINCT funder_norm) FILTER (WHERE funder_norm IS NOT NULL)::int AS distinct_funders
+      FROM liens
+      GROUP BY name_norm, city, state`);
+    await step("  idx ind ucc_count", "CREATE INDEX ON prof_individual (ucc_count DESC)");
+    await step("  idx ind ucc_6mo",   "CREATE INDEX ON prof_individual (ucc_6mo DESC)");
+    await step("  idx ind ucc_12mo",  "CREATE INDEX ON prof_individual (ucc_12mo DESC)");
+    await step("  idx ind funders",   "CREATE INDEX ON prof_individual (distinct_funders DESC)");
+    await step("  idx ind name_trgm", "CREATE INDEX ON prof_individual USING gin (person_name gin_trgm_ops)");
+  } else log("SKIP prof_individual (exists)");
+  const ci = await sql`SELECT count(*)::int n, max(ucc_count) mx FROM prof_individual`;
+  log(`prof_individual: ${ci[0].n.toLocaleString()} individuals, max filings = ${ci[0].mx}`);
+
+  await step("ANALYZE prof tables", "ANALYZE prof_business; ANALYZE prof_individual");
   log("ALL DONE ✅");
 } catch (e) { log("ABORTED: " + e.message); } finally { await sql.end(); }

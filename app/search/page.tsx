@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { PageHeader, DataTable } from "../components";
 import {
-  searchBusinesses, companiesOfPerson,
-  type BusinessRow, type PersonCompanies, type SearchWindow,
+  searchBusinesses, searchIndividuals,
+  type BusinessRow, type IndividualRow, type SearchWindow,
 } from "@/lib/features";
 
 export const dynamic = "force-dynamic";
@@ -55,26 +55,34 @@ export default async function SearchPage({
   const minFunders = Math.max(0, Number(sp.funders ?? 0) || 0);
   const win = (["all", "3mo", "6mo", "12mo"].includes(sp.win ?? "") ? sp.win : "all") as SearchWindow;
 
-  const showBiz = !!(q || funder) || min > 1 || minFunders > 0 || !person;
-  const [biz, people] = await Promise.all([
-    showBiz ? searchBusinesses({ name: q, funder, minFilings: min, minFunders, window: win }) : Promise.resolve([] as BusinessRow[]),
-    person ? companiesOfPerson(person) : Promise.resolve([] as PersonCompanies[]),
+  // If an individual name is entered, search PEOPLE (filters apply to them).
+  // Otherwise search BUSINESSES. One result set, never both.
+  const individualMode = !!person;
+  const [biz, individuals] = await Promise.all([
+    individualMode ? Promise.resolve([] as BusinessRow[]) : searchBusinesses({ name: q, funder, minFilings: min, minFunders, window: win }),
+    individualMode ? searchIndividuals({ name: person, minFilings: min, minFunders, window: win }) : Promise.resolve([] as IndividualRow[]),
   ]);
 
   const winLabel = WINDOWS.find((w) => w.v === win)?.label.toLowerCase();
+  const filterNote = (
+    <>
+      {min > 1 && <> · <span className="text-indigo-700">{min}+</span> filings{win !== "all" && <> in the {winLabel}</>}</>}
+      {minFunders > 0 && <> · <span className="text-indigo-700">{minFunders}+</span> distinct funders</>}
+    </>
+  );
 
   return (
     <div>
       <PageHeader
         title="Search"
-        subtitle="Find businesses by name, funder, or filing activity — or look up a person. Filters combine."
+        subtitle="Find debtors by name, creditor, or filing activity — or look up an individual. Filters combine."
       />
 
       <form action="/search" method="get" className="mb-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="grid gap-4 sm:grid-cols-3">
-          <Field name="q" label="Company / debtor" value={q} placeholder="e.g. Joe's Pizza" />
+          <Field name="q" label="Debtor" value={q} placeholder="e.g. Joe's Pizza" />
           <Field name="person" label="Individual" value={person} placeholder="e.g. John Smith" />
-          <Field name="funder" label="Secured party (competitor)" value={funder} placeholder="e.g. Forward Financing" />
+          <Field name="funder" label="Secured party / creditor" value={funder} placeholder="e.g. Forward Financing" />
         </div>
         <div className="mt-4 flex flex-wrap items-end gap-4">
           <NumField name="min" label="Min filings" value={min} />
@@ -102,12 +110,27 @@ export default async function SearchPage({
         ))}
       </div>
 
-      {showBiz && (
-        <section className="mb-12">
+      {individualMode ? (
+        <section>
           <h2 className="mb-3 text-sm font-semibold text-slate-700">
-            {biz.length} {biz.length === 1 ? "business" : "businesses"}
-            {min > 1 && <> · <span className="text-indigo-700">{min}+</span> filings{win !== "all" && <> in the {winLabel}</>}</>}
-            {minFunders > 0 && <> · <span className="text-indigo-700">{minFunders}+</span> distinct funders</>}
+            {individuals.length} {individuals.length === 1 ? "individual" : "individuals"} matching &ldquo;{person}&rdquo;{filterNote}
+          </h2>
+          <DataTable<IndividualRow>
+            rows={individuals}
+            empty="No individuals match these filters."
+            columns={[
+              { key: "person_name", label: "Individual", className: "font-medium text-slate-900" },
+              { key: "city", label: "Location", render: (r) => [r.city, r.state].filter(Boolean).join(", ") || "—" },
+              { key: "ucc_count", label: "Filings", className: "text-center nums" },
+              { key: "distinct_funders", label: "Funders", className: "text-center nums" },
+              { key: "last_filing", label: "Last filing" },
+            ]}
+          />
+        </section>
+      ) : (
+        <section>
+          <h2 className="mb-3 text-sm font-semibold text-slate-700">
+            {biz.length} {biz.length === 1 ? "business" : "businesses"}{filterNote}
             {funder && <> · funded by <span className="text-indigo-700">{funder}</span></>}
           </h2>
           <DataTable<BusinessRow>
@@ -121,22 +144,6 @@ export default async function SearchPage({
               { key: "ucc_count", label: "Filings", className: "text-center nums" },
               { key: "distinct_funders", label: "Funders", className: "text-center nums" },
               { key: "last_filing", label: "Last filing" },
-            ]}
-          />
-        </section>
-      )}
-
-      {person && (
-        <section>
-          <h2 className="mb-3 text-sm font-semibold text-slate-700">People matching &ldquo;{person}&rdquo;</h2>
-          <DataTable<PersonCompanies>
-            rows={people}
-            empty="No people match."
-            columns={[
-              { key: "last", label: "Person", className: "font-medium text-slate-900", render: (r) => `${r.first} ${r.last}` },
-              { key: "city", label: "Location", render: (r) => [r.city, r.state].filter(Boolean).join(", ") || "—" },
-              { key: "companies", label: "# Companies", className: "text-center nums" },
-              { key: "company_list", label: "Companies", render: (r) => <span className="text-slate-500">{r.company_list}</span> },
             ]}
           />
         </section>
