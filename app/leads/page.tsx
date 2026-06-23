@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { PageHeader, DataTable } from "../components";
+import { PageHeader, DataTable, TaxBadge } from "../components";
 import {
   searchBusinesses, searchIndividuals,
   type BusinessRow, type IndividualRow, type SearchWindow,
@@ -137,7 +137,9 @@ export default async function LeadsPage({
               ) },
             { key: "city", label: "Location", render: (r) => [r.city, r.state].filter(Boolean).join(", ") || "—" },
             { key: "ucc_count", label: "Filings", className: "text-center nums" },
+            { key: "active_liens", label: "Active", className: "text-center nums" },
             { key: "distinct_funders", label: "Funders", className: "text-center nums" },
+            { key: "tax_liens", label: "Tax liens", className: "text-center", render: (r) => <TaxBadge n={r.tax_liens} /> },
             { key: "last_filing", label: "Last filing" },
           ]}
         />
@@ -151,7 +153,9 @@ export default async function LeadsPage({
               ) },
             { key: "city", label: "Location", render: (r) => [r.city, r.state].filter(Boolean).join(", ") || "—" },
             { key: "ucc_count", label: "Filings", className: "text-center nums" },
+            { key: "active_liens", label: "Active", className: "text-center nums" },
             { key: "distinct_funders", label: "Funders", className: "text-center nums" },
+            { key: "tax_liens", label: "Tax liens", className: "text-center", render: (r) => <TaxBadge n={r.tax_liens} /> },
             { key: "last_filing", label: "Last filing" },
           ]}
         />

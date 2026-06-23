@@ -107,6 +107,7 @@ export type BusinessRow = {
   biz_norm: string; biz_name: string; city: string; state: string;
   ucc_count: number; ucc_6mo: number; ucc_12mo: number;
   last_filing: string; distinct_funders: number;
+  active_liens: number; tax_liens: number;
 };
 
 export type SearchWindow = "all" | "3mo" | "6mo" | "12mo";
@@ -130,7 +131,7 @@ export function searchBusinesses(opts: {
   const col = WINDOW_COL[opts.window ?? "all"] ?? "ucc_count"; // whitelisted, safe to interpolate
   return q<BusinessRow>(
     `SELECT biz_norm, biz_name, city, state, ucc_count, ucc_6mo, ucc_12mo,
-            last_filing::text AS last_filing, distinct_funders
+            last_filing::text AS last_filing, distinct_funders, active_liens, tax_liens
      FROM prof_business
      WHERE ${col} >= $1
        AND distinct_funders >= $4
@@ -150,6 +151,7 @@ export type IndividualRow = {
   person_key: string; person_name: string; city: string; state: string;
   ucc_count: number; ucc_6mo: number; ucc_12mo: number;
   last_filing: string; distinct_funders: number;
+  active_liens: number; tax_liens: number;
 };
 
 // Unified individual search: people who are UCC debtors/guarantors, by name +
@@ -167,7 +169,7 @@ export function searchIndividuals(opts: {
   const col = WINDOW_COL[opts.window ?? "all"] ?? "ucc_count";
   return q<IndividualRow>(
     `SELECT person_key, person_name, city, state, ucc_count, ucc_6mo, ucc_12mo,
-            last_filing::text AS last_filing, distinct_funders
+            last_filing::text AS last_filing, distinct_funders, active_liens, tax_liens
      FROM prof_individual
      WHERE ${col} >= $1 AND distinct_funders >= $3
        AND ($2 = '' OR person_name ILIKE '%' || $2 || '%')

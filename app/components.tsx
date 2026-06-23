@@ -136,6 +136,16 @@ export function Stat({ label, value, tone = "default" }: { label: string; value:
   );
 }
 
+// Tax-lien/judgment count badge for list rows — amber when present, em-dash when none.
+export function TaxBadge({ n }: { n: number }) {
+  if (!n) return <span className="text-slate-300">—</span>;
+  return (
+    <span className="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-700 ring-1 ring-inset ring-amber-600/20">
+      {n}
+    </span>
+  );
+}
+
 // Lien status pill — Active (green) / Lapsed (slate) / Terminated (slate, muted).
 export function StatusPill({ status }: { status: string }) {
   const tones: Record<string, string> = {
