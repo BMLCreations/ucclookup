@@ -54,7 +54,7 @@ export default async function CompanyProfile({ params }: { params: Promise<{ id:
               { key: "filed", label: "Filed" },
               { key: "action", label: "Type" },
               { key: "funder", label: "Funded by", className: "font-medium text-slate-900" },
-              { key: "lapse", label: "Lapses" },
+              { key: "lapse", label: "Lapse / Expiration date" },
             ]}
           />
         </Collapsible>
