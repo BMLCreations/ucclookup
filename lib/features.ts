@@ -117,24 +117,26 @@ const WINDOW_COL: Record<SearchWindow, string> = {
 // Unified business search: name (company/debtor) + funder (secured party) +
 // minimum # of UCC filings within a date window. Filters AND together.
 export function searchBusinesses(opts: {
-  name?: string; funder?: string; minFilings?: number; window?: SearchWindow;
+  name?: string; funder?: string; minFilings?: number; minFunders?: number; window?: SearchWindow;
 }) {
   const name = (opts.name ?? "").trim();
   const funder = (opts.funder ?? "").trim();
   const minFilings = Math.max(1, Number(opts.minFilings) || 1);
+  const minFunders = Math.max(0, Number(opts.minFunders) || 0); // stacking signal (distinct funders)
   const col = WINDOW_COL[opts.window ?? "all"] ?? "ucc_count"; // whitelisted, safe to interpolate
   return q<BusinessRow>(
     `SELECT biz_norm, biz_name, city, state, ucc_count, ucc_6mo, ucc_12mo,
             last_filing::text AS last_filing, distinct_funders
      FROM prof_business
      WHERE ${col} >= $1
+       AND distinct_funders >= $4
        AND ($2 = '' OR biz_name ILIKE '%' || $2 || '%')
        AND ($3 = '' OR biz_norm IN (
              SELECT normalize_name(merchant_name) FROM sum_leads
              WHERE funder_norm = normalize_name($3)))
-     ORDER BY ${col} DESC, ucc_count DESC
+     ORDER BY ${col} DESC, distinct_funders DESC
      LIMIT 200`,
-    [minFilings, name, funder],
+    [minFilings, name, funder, minFunders],
   );
 }
 

@@ -56,6 +56,7 @@ try {
     await step("  idx ucc_count",  "CREATE INDEX ON prof_business (ucc_count DESC)");
     await step("  idx ucc_6mo",    "CREATE INDEX ON prof_business (ucc_6mo DESC)");
     await step("  idx ucc_12mo",   "CREATE INDEX ON prof_business (ucc_12mo DESC)");
+    await step("  idx funders",    "CREATE INDEX ON prof_business (distinct_funders DESC)");
     await step("  idx biz_norm",   "CREATE INDEX ON prof_business (biz_norm)");
     await step("  idx name_trgm",  "CREATE INDEX ON prof_business USING gin (biz_name gin_trgm_ops)");
   } else log("SKIP prof_business (exists)");

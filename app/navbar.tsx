@@ -4,9 +4,7 @@ import { usePathname } from "next/navigation";
 
 const links = [
   { href: "/", label: "Dashboard" },
-  { href: "/feed", label: "Competitor Feed" },
-  { href: "/stacking", label: "Stacking Detector" },
-  { href: "/search", label: "Owner Search" },
+  { href: "/search", label: "Search" },
 ];
 
 export function NavBar() {

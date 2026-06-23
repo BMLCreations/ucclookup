@@ -14,6 +14,12 @@ const WINDOWS: { v: SearchWindow; label: string }[] = [
   { v: "3mo", label: "Last 3 months" },
 ];
 
+const PRESETS = [
+  { label: "Stacked · 3+ funders", href: "/search?funders=3" },
+  { label: "Heavily stacked · 5+ funders", href: "/search?funders=5" },
+  { label: "Most active · 10+ filings", href: "/search?min=10" },
+];
+
 function Field({ name, label, value, placeholder }: { name: string; label: string; value: string; placeholder: string }) {
   return (
     <label className="block">
@@ -26,21 +32,32 @@ function Field({ name, label, value, placeholder }: { name: string; label: strin
   );
 }
 
+function NumField({ name, label, value }: { name: string; label: string; value: number }) {
+  return (
+    <label className="block">
+      <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</span>
+      <input type="number" name={name} min={name === "funders" ? 0 : 1} defaultValue={value}
+        className="w-32 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm shadow-sm outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100" />
+    </label>
+  );
+}
+
 export default async function SearchPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; funder?: string; person?: string; min?: string; win?: string }>;
+  searchParams: Promise<{ q?: string; funder?: string; person?: string; min?: string; funders?: string; win?: string }>;
 }) {
   const sp = await searchParams;
   const q = (sp.q ?? "").trim();
   const funder = (sp.funder ?? "").trim();
   const person = (sp.person ?? "").trim();
   const min = Math.max(1, Number(sp.min ?? 1) || 1);
+  const minFunders = Math.max(0, Number(sp.funders ?? 0) || 0);
   const win = (["all", "3mo", "6mo", "12mo"].includes(sp.win ?? "") ? sp.win : "all") as SearchWindow;
 
-  const showBiz = !!(q || funder) || min > 1 || !person;
+  const showBiz = !!(q || funder) || min > 1 || minFunders > 0 || !person;
   const [biz, people] = await Promise.all([
-    showBiz ? searchBusinesses({ name: q, funder, minFilings: min, window: win }) : Promise.resolve([] as BusinessRow[]),
+    showBiz ? searchBusinesses({ name: q, funder, minFilings: min, minFunders, window: win }) : Promise.resolve([] as BusinessRow[]),
     person ? companiesOfPerson(person) : Promise.resolve([] as PersonCompanies[]),
   ]);
 
@@ -53,18 +70,15 @@ export default async function SearchPage({
         subtitle="Find businesses by name, funder, or filing activity — or look up a person. Filters combine."
       />
 
-      <form action="/search" method="get" className="mb-10 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <form action="/search" method="get" className="mb-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="grid gap-4 sm:grid-cols-3">
           <Field name="q" label="Company / debtor" value={q} placeholder="e.g. Joe's Pizza" />
           <Field name="person" label="Individual" value={person} placeholder="e.g. John Smith" />
           <Field name="funder" label="Secured party (competitor)" value={funder} placeholder="e.g. Forward Financing" />
         </div>
         <div className="mt-4 flex flex-wrap items-end gap-4">
-          <label className="block">
-            <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Min UCC filings</span>
-            <input type="number" name="min" min={1} defaultValue={min}
-              className="w-28 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm shadow-sm outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100" />
-          </label>
+          <NumField name="min" label="Min filings" value={min} />
+          <NumField name="funders" label="Min funders (stacking)" value={minFunders} />
           <label className="block">
             <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Within</span>
             <select name="win" defaultValue={win}
@@ -78,12 +92,23 @@ export default async function SearchPage({
         </div>
       </form>
 
+      <div className="mb-10 flex flex-wrap items-center gap-2">
+        <span className="text-xs font-medium text-slate-400">Quick views:</span>
+        {PRESETS.map((p) => (
+          <Link key={p.href} href={p.href}
+            className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600 shadow-sm transition hover:border-indigo-300 hover:text-indigo-700">
+            {p.label}
+          </Link>
+        ))}
+      </div>
+
       {showBiz && (
         <section className="mb-12">
           <h2 className="mb-3 text-sm font-semibold text-slate-700">
             {biz.length} {biz.length === 1 ? "business" : "businesses"}
-            {min > 1 && <> with <span className="text-indigo-700">{min}+</span> filings{win !== "all" && <> in the {winLabel}</>}</>}
-            {funder && <> funded by <span className="text-indigo-700">{funder}</span></>}
+            {min > 1 && <> · <span className="text-indigo-700">{min}+</span> filings{win !== "all" && <> in the {winLabel}</>}</>}
+            {minFunders > 0 && <> · <span className="text-indigo-700">{minFunders}+</span> distinct funders</>}
+            {funder && <> · funded by <span className="text-indigo-700">{funder}</span></>}
           </h2>
           <DataTable<BusinessRow>
             rows={biz}

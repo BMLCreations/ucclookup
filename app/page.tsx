@@ -27,9 +27,9 @@ function SearchIcon() {
 }
 
 const features = [
-  { href: "/feed", title: "Competitor Feed", desc: "Fresh merchants just funded by your competitors — ready-to-call leads.", icon: <TargetIcon /> },
-  { href: "/stacking", title: "Stacking Detector", desc: "Businesses carrying multiple active advances from different funders.", icon: <ChartIcon /> },
-  { href: "/search", title: "Owner Search", desc: "Find a company's owner — then every other company they run.", icon: <SearchIcon /> },
+  { href: "/search", title: "Find leads", desc: "Search merchants by name, funder, or filing activity — fresh, ready-to-call.", icon: <TargetIcon /> },
+  { href: "/search?funders=3", title: "Stacked merchants", desc: "Businesses carrying advances from multiple different funders.", icon: <ChartIcon /> },
+  { href: "/search", title: "Owner & company lookup", desc: "Drill into any business or person and their full profile.", icon: <SearchIcon /> },
 ];
 
 export default async function Home() {
