@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { PageHeader, DataTable, TaxBadge, UpgradeWall, LoginGate } from "../components";
 import { getSessionUser } from "@/lib/auth";
-import { consumeSearch, FREE_DAILY_SEARCHES, FREE_LEADGEN_ROWS } from "@/lib/usage";
+import { consumeSearch, FREE_WEEKLY_SEARCHES, FREE_LEADGEN_ROWS } from "@/lib/usage";
 import {
   searchBusinesses, searchIndividuals,
   type BusinessRow, type IndividualRow, type SearchWindow,
@@ -143,7 +143,7 @@ export default async function LeadsPage({
             </select>
           </label>
           {!pro && didSearch && !overQuota && (
-            <span className="ml-auto self-center text-xs text-slate-400">Free · {used}/{FREE_DAILY_SEARCHES} searches today</span>
+            <span className="ml-auto self-center text-xs text-slate-400">Free · {used}/{FREE_WEEKLY_SEARCHES} searches this week</span>
           )}
           <button type="submit" className={`${!pro && didSearch && !overQuota ? "" : "ml-auto"} rounded-xl bg-indigo-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 active:bg-indigo-800`}>
             Generate
@@ -165,7 +165,7 @@ export default async function LeadsPage({
         <LoginGate />
       ) : overQuota ? (
         <UpgradeWall
-          title={`You've used your ${FREE_DAILY_SEARCHES} free searches today`}
+          title={`You've used your ${FREE_WEEKLY_SEARCHES} free searches this week`}
           message="Upgrade to Pro for unlimited lead generation, all results, and CSV export."
         />
       ) : (

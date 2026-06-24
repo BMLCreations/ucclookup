@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { PageHeader, DataTable, TaxBadge, UpgradeWall, LoginGate } from "../components";
 import { getSessionUser } from "@/lib/auth";
-import { consumeSearch, FREE_DAILY_SEARCHES } from "@/lib/usage";
+import { consumeSearch, FREE_WEEKLY_SEARCHES } from "@/lib/usage";
 import {
   searchBusinesses, searchIndividuals,
   type BusinessRow, type IndividualRow,
@@ -68,7 +68,7 @@ export default async function SearchPage({
         </div>
         <div className="mt-4 flex items-center gap-3">
           {!pro && didSearch && !overQuota && (
-            <span className="text-xs text-slate-400">Free plan · {used} of {FREE_DAILY_SEARCHES} daily searches used</span>
+            <span className="text-xs text-slate-400">Free plan · {used} of {FREE_WEEKLY_SEARCHES} searches used this week</span>
           )}
           <button type="submit" className="ml-auto rounded-xl bg-indigo-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 active:bg-indigo-800">
             Search
@@ -80,7 +80,7 @@ export default async function SearchPage({
         <LoginGate />
       ) : overQuota ? (
         <UpgradeWall
-          title={`You've used your ${FREE_DAILY_SEARCHES} free searches today`}
+          title={`You've used your ${FREE_WEEKLY_SEARCHES} free searches this week`}
           message="Upgrade to Pro for unlimited searches, full Lead Generation, and complete profiles."
         />
       ) : individualMode ? (
