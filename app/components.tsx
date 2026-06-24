@@ -146,6 +146,18 @@ export function TaxBadge({ n }: { n: number }) {
   );
 }
 
+// CA business-registry status — Active (green), Suspended/Forfeited (red),
+// everything else terminated/inactive/merged (slate).
+export function EntityStatusBadge({ status }: { status: string }) {
+  const s = status.toLowerCase();
+  const tone = s.includes("active")
+    ? "bg-emerald-50 text-emerald-700 ring-emerald-600/20"
+    : s.includes("suspend") || s.includes("forfeit")
+      ? "bg-red-50 text-red-700 ring-red-600/20"
+      : "bg-slate-100 text-slate-500 ring-slate-400/20";
+  return <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${tone}`}>{status}</span>;
+}
+
 // Lien status pill — Active (green) / Lapsed (slate) / Terminated (slate, muted).
 export function StatusPill({ status }: { status: string }) {
   const tones: Record<string, string> = {

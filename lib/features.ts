@@ -190,8 +190,55 @@ export function businessHeadline(bizNorm: string) {
     [bizNorm],
   );
 }
+
+// CA business-registry facts for a company. A normalized name can map to several
+// registered entities; pick the best (prefer Active, then most recently active).
+export type BizRegistry = { entity_name: string; entity_status: string; entity_type: string; agent: string | null };
+export function businessRegistry(bizNorm: string) {
+  return q<BizRegistry>(
+    `SELECT e.entity_name, e.entity_status, e.entity_type,
+            coalesce(nullif(btrim(a.org_name),''), nullif(btrim(a.first_name||' '||a.last_name),'')) AS agent
+     FROM be_entities e
+     LEFT JOIN be_agents a ON a.entity_num = e.entity_num
+     WHERE normalize_name(e.entity_name) = $1
+     ORDER BY (e.entity_status='Active') DESC, e.last_si_file_date DESC NULLS LAST
+     LIMIT 1`,
+    [bizNorm],
+  );
+}
+
+// The distinct funders (secured parties) on a merchant's UCC liens, with how many
+// liens each and the most recent. funder_norm lets us link to a funder profile.
+export type FunderBrief = { funder: string; funder_norm: string; liens: number; last_filing: string };
+export function businessFundersList(bizNorm: string) {
+  return q<FunderBrief>(
+    `SELECT coalesce(sp.org_name,'') AS funder, normalize_name(sp.org_name) AS funder_norm,
+            count(DISTINCT f.ucc1_num)::int AS liens, max(f.filing_date)::date::text AS last_filing
+     FROM ucc_debtors d
+     JOIN ucc_filings f ON f.ucc1_num = d.ucc1_num AND f.ucc3_num = d.ucc3_num
+          AND f.filing_type_id='UCC' AND f.action_type='Lien Financing Stmt'
+     JOIN ucc_secured_parties sp ON sp.ucc1_num = f.ucc1_num AND sp.ucc3_num = f.ucc3_num AND sp.org_name <> ''
+     WHERE d.debtor_type='Organization' AND normalize_name(d.org_name) = $1
+     GROUP BY 1, 2 ORDER BY liens DESC, last_filing DESC LIMIT 50`,
+    [bizNorm],
+  );
+}
+
+// Yearly count of a merchant's new UCC liens — drives the funding-activity bars.
+export type TimelinePoint = { period: string; n: number };
+export function businessTimeline(bizNorm: string) {
+  return q<TimelinePoint>(
+    `SELECT to_char(date_trunc('year', f.filing_date),'YYYY') AS period, count(DISTINCT f.ucc1_num)::int AS n
+     FROM ucc_debtors d
+     JOIN ucc_filings f ON f.ucc1_num = d.ucc1_num AND f.ucc3_num = d.ucc3_num
+          AND f.filing_type_id='UCC' AND f.action_type='Lien Financing Stmt'
+     WHERE d.debtor_type='Organization' AND normalize_name(d.org_name) = $1
+     GROUP BY 1 ORDER BY 1`,
+    [bizNorm],
+  );
+}
 export type BizFiling = {
-  filed: string; funder: string; funder_loc: string | null;
+  filed: string; funder: string; funder_norm: string; funder_loc: string | null;
   status: string; lapse: string; debtor_addr: string | null; filing_num: string;
 };
 
@@ -202,11 +249,12 @@ export type BizFiling = {
 // continued lapse date, the debtor address on that filing, and the filing number.
 function filingSql(where: string): string {
   return `
-    SELECT filed, funder, funder_loc, debtor_addr, filing_num, status, lapse FROM (
+    SELECT filed, funder, funder_norm, funder_loc, debtor_addr, filing_num, status, lapse FROM (
       SELECT DISTINCT ON (f.ucc1_num)
         f.filing_date AS fd,
         f.filing_date::date::text AS filed,
         coalesce(sp.org_name, '') AS funder,
+        coalesce(normalize_name(sp.org_name), '') AS funder_norm,
         nullif(btrim(coalesce(nullif(sp.city,''),'') ||
           CASE WHEN nullif(sp.state,'') IS NOT NULL THEN ', ' || sp.state ELSE '' END), ',') AS funder_loc,
         nullif(btrim(coalesce(nullif(d.addr1,''),'') ||
@@ -337,6 +385,32 @@ export function businessPrincipals(bizNorm: string) {
      WHERE normalize_name(e.entity_name) = $1 AND p.last_name <> ''
      ORDER BY e.entity_name, name LIMIT 100`,
     [bizNorm],
+  );
+}
+
+// ── Funder profile ─────────────────────────────────────────────────────────
+// A secured party's whole book, from the denormalized sum_leads table.
+export type FunderHeadline = { funder_name: string; total: number; merchants: number; last_filing: string };
+export function funderHeadline(funderNorm: string) {
+  return q<FunderHeadline>(
+    `SELECT max(funder_name) AS funder_name, count(*)::int AS total,
+            count(DISTINCT normalize_name(merchant_name))::int AS merchants,
+            max(filed)::date::text AS last_filing
+     FROM sum_leads WHERE funder_norm = $1`,
+    [funderNorm],
+  );
+}
+export type FunderMerchant = { merchant: string; biz_norm: string; liens: number; last_filing: string; city: string; state: string };
+export function funderMerchants(funderNorm: string) {
+  return q<FunderMerchant>(
+    `SELECT max(merchant_name) AS merchant, normalize_name(merchant_name) AS biz_norm,
+            count(*)::int AS liens, max(filed)::date::text AS last_filing,
+            (array_agg(nullif(city,'') ORDER BY filed DESC) FILTER (WHERE city <> ''))[1] AS city,
+            (array_agg(nullif(state,'') ORDER BY filed DESC) FILTER (WHERE state <> ''))[1] AS state
+     FROM sum_leads WHERE funder_norm = $1
+     GROUP BY normalize_name(merchant_name)
+     ORDER BY liens DESC, last_filing DESC LIMIT 200`,
+    [funderNorm],
   );
 }
 

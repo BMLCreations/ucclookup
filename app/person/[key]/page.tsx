@@ -58,7 +58,9 @@ export default async function PersonProfile({ params }: { params: Promise<{ key:
               { key: "filed", label: "Filed" },
               { key: "funder", label: "Secured party", render: (r) => (
                   <div>
-                    <div className="font-medium text-slate-900">{r.funder || "—"}</div>
+                    {r.funder
+                      ? <Link href={`/funder/${encodeURIComponent(r.funder_norm)}`} className="font-medium text-indigo-700 hover:underline">{r.funder}</Link>
+                      : <span className="font-medium text-slate-900">—</span>}
                     {r.funder_loc && <div className="text-xs text-slate-400">{r.funder_loc}</div>}
                   </div>
                 ) },

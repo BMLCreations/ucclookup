@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { DataTable, Stat, Collapsible, StatusPill, TaxBadge } from "../../components";
+import { DataTable, Stat, Collapsible, StatusPill, TaxBadge, EntityStatusBadge } from "../../components";
 import {
   businessHeadline, businessFilings, businessPrincipals, businessLiens, relatedCompanies,
-  type BizFiling, type BizPrincipal, type LienRow, type RelatedCompany,
+  businessRegistry, businessFundersList, businessTimeline,
+  type BizFiling, type BizPrincipal, type LienRow, type RelatedCompany, type FunderBrief,
 } from "@/lib/features";
 
 export const dynamic = "force-dynamic";
@@ -15,15 +16,20 @@ export default async function CompanyProfile({ params }: { params: Promise<{ id:
   const [head] = await businessHeadline(bizNorm);
   if (!head) notFound();
 
-  const [filings, principals, liens, related] = await Promise.all([
+  const [filings, principals, liens, related, registry, funders, timeline] = await Promise.all([
     businessFilings(bizNorm),
     businessPrincipals(bizNorm),
     businessLiens(bizNorm),
     relatedCompanies(bizNorm),
+    businessRegistry(bizNorm),
+    businessFundersList(bizNorm),
+    businessTimeline(bizNorm),
   ]);
 
   const location = [head.city, head.state].filter(Boolean).join(", ");
   const liensLabel = liens.length >= 100 ? "100+" : String(liens.length);
+  const reg = registry[0];
+  const maxYear = Math.max(1, ...timeline.map((p) => p.n));
 
   return (
     <div>
@@ -41,6 +47,14 @@ export default async function CompanyProfile({ params }: { params: Promise<{ id:
         </div>
       </div>
 
+      {reg && (
+        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm">
+          <EntityStatusBadge status={reg.entity_status} />
+          {reg.entity_type && <span className="text-slate-600">{reg.entity_type}</span>}
+          {reg.agent && <span className="text-slate-400">· Registered agent: <span className="text-slate-600">{reg.agent}</span></span>}
+        </div>
+      )}
+
       <div className="my-7 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         <Stat label="Total UCC filings" value={head.ucc_count.toLocaleString()} />
         <Stat label="Distinct funders" value={head.distinct_funders.toLocaleString()} />
@@ -49,7 +63,37 @@ export default async function CompanyProfile({ params }: { params: Promise<{ id:
         <Stat label="Tax liens / judgments" value={liensLabel} tone={liens.length > 0 ? "warn" : "default"} />
       </div>
 
+      {timeline.length >= 2 && (
+        <div className="mb-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="mb-3 text-sm font-semibold text-slate-700">Funding activity by year</div>
+          <div className="flex h-24 items-end gap-1.5">
+            {timeline.map((p) => (
+              <div key={p.period} className="flex flex-1 flex-col items-center gap-1" title={`${p.n} filing${p.n === 1 ? "" : "s"} in ${p.period}`}>
+                <div className="w-full rounded-t bg-indigo-500/80" style={{ height: `${Math.max(4, Math.round((p.n / maxYear) * 80))}px` }} />
+                <span className="text-[10px] text-slate-400">{p.period.slice(2)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="space-y-3">
+        <Collapsible
+          title={<>Funders <span className="font-normal text-slate-400">· who has financed this business</span></>}
+          count={funders.length}
+        >
+          <DataTable<FunderBrief>
+            rows={funders}
+            empty="No funders on record."
+            columns={[
+              { key: "funder", label: "Funder", className: "font-medium", render: (r) => (
+                  <Link href={`/funder/${encodeURIComponent(r.funder_norm)}`} className="font-medium text-indigo-700 hover:underline">{r.funder}</Link>
+                ) },
+              { key: "liens", label: "Liens", className: "text-center nums" },
+              { key: "last_filing", label: "Last filing" },
+            ]}
+          />
+        </Collapsible>
         <Collapsible title="UCC filing history" count={filings.length}>
           <DataTable<BizFiling>
             rows={filings}
@@ -58,7 +102,9 @@ export default async function CompanyProfile({ params }: { params: Promise<{ id:
               { key: "filed", label: "Filed" },
               { key: "funder", label: "Secured party", render: (r) => (
                   <div>
-                    <div className="font-medium text-slate-900">{r.funder || "—"}</div>
+                    {r.funder
+                      ? <Link href={`/funder/${encodeURIComponent(r.funder_norm)}`} className="font-medium text-indigo-700 hover:underline">{r.funder}</Link>
+                      : <span className="font-medium text-slate-900">—</span>}
                     {r.funder_loc && <div className="text-xs text-slate-400">{r.funder_loc}</div>}
                   </div>
                 ) },
