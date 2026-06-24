@@ -320,13 +320,20 @@ export function relatedCompanies(bizNorm: string) {
   );
 }
 
-export type BizPrincipal = { name: string; role: string; entity_name: string };
+export type BizPrincipal = { name: string; role: string; entity_name: string; person_key: string; has_profile: boolean };
+// person_key + has_profile let the UI link a principal to their person profile,
+// but only when they actually appear as a UCC individual debtor (else plain text).
+const PRINCIPAL_KEY = `upper(btrim(p.first_name))||' '||upper(btrim(p.last_name))||'|'||
+  coalesce(nullif(upper(btrim(p.city)),''),'')||'|'||coalesce(nullif(upper(btrim(p.state)),''),'')`;
 export function businessPrincipals(bizNorm: string) {
   return q<BizPrincipal>(
     `SELECT DISTINCT initcap(lower(p.first_name || ' ' || p.last_name)) AS name,
-            p.position_type AS role, e.entity_name
+            p.position_type AS role, e.entity_name,
+            ${PRINCIPAL_KEY} AS person_key,
+            (pi.person_key IS NOT NULL) AS has_profile
      FROM be_entities e
      JOIN be_principals p ON p.entity_num = e.entity_num
+     LEFT JOIN prof_individual pi ON pi.person_key = ${PRINCIPAL_KEY}
      WHERE normalize_name(e.entity_name) = $1 AND p.last_name <> ''
      ORDER BY e.entity_name, name LIMIT 100`,
     [bizNorm],
@@ -357,6 +364,42 @@ export function personFilings(personKey: string) {
   return q<BizFiling>(
     filingSql(`d.debtor_type = 'Individual' AND f.filing_type_id = 'UCC' AND ${PERSON_MATCH}`),
     [nameNorm, city, state],
+  );
+}
+
+// Co-owners: other people who are principals on the SAME companies as this person
+// (person -> their companies -> the other principals on them). Nominees (anyone on
+// > 25 companies) excluded; links to a co-owner's person profile when one exists.
+export type CoOwner = { name: string; city: string; state: string; shared: number; person_key: string; has_profile: boolean };
+export function personCoOwners(personKey: string) {
+  const [nameNorm = "", city = ""] = personKey.split("|");
+  return q<CoOwner>(
+    `WITH me AS (
+       SELECT DISTINCT p.entity_num FROM be_principals p
+       WHERE upper(btrim(p.first_name))||' '||upper(btrim(p.last_name)) = $1
+         AND ($2 = '' OR upper(btrim(p.city)) = $2) AND p.last_name <> ''
+       LIMIT 200
+     ),
+     co AS (
+       SELECT upper(btrim(p2.first_name))||' '||upper(btrim(p2.last_name)) AS cname,
+              nullif(upper(btrim(p2.city)),'') AS ccity, nullif(upper(btrim(p2.state)),'') AS cstate,
+              count(DISTINCT p2.entity_num) AS shared
+       FROM me JOIN be_principals p2 ON p2.entity_num = me.entity_num AND p2.last_name <> ''
+       WHERE upper(btrim(p2.first_name))||' '||upper(btrim(p2.last_name)) <> $1
+       GROUP BY 1, 2, 3
+     ),
+     guard AS (  -- drop nominees: a co-owner listed on > 25 companies is an agent
+       SELECT cname, ccity, cstate, shared FROM co
+       WHERE (SELECT count(*) FROM be_principals bp
+              WHERE upper(btrim(bp.first_name))||' '||upper(btrim(bp.last_name)) = co.cname) <= 25
+     )
+     SELECT initcap(lower(g.cname)) AS name, coalesce(g.ccity,'') AS city, coalesce(g.cstate,'') AS state,
+            g.shared, g.cname||'|'||coalesce(g.ccity,'')||'|'||coalesce(g.cstate,'') AS person_key,
+            (pi.person_key IS NOT NULL) AS has_profile
+     FROM guard g
+     LEFT JOIN prof_individual pi ON pi.person_key = g.cname||'|'||coalesce(g.ccity,'')||'|'||coalesce(g.cstate,'')
+     ORDER BY g.shared DESC, (pi.person_key IS NOT NULL) DESC LIMIT 50`,
+    [nameNorm, city],
   );
 }
 
