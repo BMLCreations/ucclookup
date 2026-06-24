@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { DataTable, Stat, Collapsible, StatusPill } from "../../components";
+import { DataTable, Stat, Collapsible, StatusPill, TaxBadge } from "../../components";
 import {
-  businessHeadline, businessFilings, businessPrincipals, businessLiens,
-  type BizFiling, type BizPrincipal, type LienRow,
+  businessHeadline, businessFilings, businessPrincipals, businessLiens, relatedCompanies,
+  type BizFiling, type BizPrincipal, type LienRow, type RelatedCompany,
 } from "@/lib/features";
 
 export const dynamic = "force-dynamic";
@@ -15,10 +15,11 @@ export default async function CompanyProfile({ params }: { params: Promise<{ id:
   const [head] = await businessHeadline(bizNorm);
   if (!head) notFound();
 
-  const [filings, principals, liens] = await Promise.all([
+  const [filings, principals, liens, related] = await Promise.all([
     businessFilings(bizNorm),
     businessPrincipals(bizNorm),
     businessLiens(bizNorm),
+    relatedCompanies(bizNorm),
   ]);
 
   const location = [head.city, head.state].filter(Boolean).join(", ");
@@ -96,6 +97,25 @@ export default async function CompanyProfile({ params }: { params: Promise<{ id:
               { key: "name", label: "Person", className: "font-medium text-slate-900" },
               { key: "role", label: "Role" },
               { key: "entity_name", label: "Registered entity", render: (r) => <span className="text-slate-500">{r.entity_name}</span> },
+            ]}
+          />
+        </Collapsible>
+
+        <Collapsible
+          title={<>Related companies <span className="font-normal text-slate-400">· share an owner &amp; have UCC filings</span></>}
+          count={related.length}
+        >
+          <DataTable<RelatedCompany>
+            rows={related}
+            empty="No related companies with UCC filings found."
+            columns={[
+              { key: "biz_name", label: "Company", className: "font-medium", render: (r) => (
+                  <Link href={`/company/${encodeURIComponent(r.biz_norm)}`} className="font-medium text-indigo-700 hover:underline">{r.biz_name}</Link>
+                ) },
+              { key: "via", label: "Connected via", render: (r) => <span className="text-slate-500">{r.via}</span> },
+              { key: "ucc_count", label: "Filings", className: "text-center nums" },
+              { key: "active_liens", label: "Active", className: "text-center nums" },
+              { key: "tax_liens", label: "Tax liens", className: "text-center", render: (r) => <TaxBadge n={r.tax_liens} /> },
             ]}
           />
         </Collapsible>

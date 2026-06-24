@@ -279,6 +279,47 @@ function lienSql(where: string): string {
 export function businessLiens(bizNorm: string) {
   return q<LienRow>(lienSql(`d.debtor_type = 'Organization' AND normalize_name(d.org_name) = $1`), [bizNorm]);
 }
+// ── 1-hop network (Phase 4) ────────────────────────────────────────────────
+// Other UCC-active companies that share an owner with this one (this company ->
+// its registry principals -> their OTHER companies). Nominees/registered agents
+// (a principal on > 25 companies) are dropped so the network doesn't explode with
+// false links, and results are joined to prof_business so every link is live and
+// the related company's own lien signals come along.
+export type RelatedCompany = {
+  biz_norm: string; biz_name: string; via: string;
+  ucc_count: number; active_liens: number; tax_liens: number;
+};
+export function relatedCompanies(bizNorm: string) {
+  return q<RelatedCompany>(
+    `WITH my_principals AS (
+       SELECT DISTINCT upper(btrim(p.first_name))||' '||upper(btrim(p.last_name)) AS pname,
+              nullif(upper(btrim(p.city)),'') AS pcity
+       FROM be_entities e JOIN be_principals p ON p.entity_num = e.entity_num
+       WHERE normalize_name(e.entity_name) = $1 AND p.last_name <> ''
+     ),
+     owners AS (  -- drop nominees: a principal listed on > 25 companies is an agent
+       SELECT pname, pcity FROM my_principals mp
+       WHERE (SELECT count(*) FROM be_principals bp
+              WHERE upper(btrim(bp.first_name))||' '||upper(btrim(bp.last_name)) = mp.pname) <= 25
+     ),
+     related AS (
+       SELECT DISTINCT normalize_name(e2.entity_name) AS biz_norm, o.pname
+       FROM owners o
+       JOIN be_principals p2 ON upper(btrim(p2.first_name))||' '||upper(btrim(p2.last_name)) = o.pname
+            AND (o.pcity IS NULL OR upper(btrim(p2.city)) = o.pcity)
+       JOIN be_entities e2 ON e2.entity_num = p2.entity_num
+       WHERE normalize_name(e2.entity_name) <> $1
+     )
+     SELECT r.biz_norm, max(b.biz_name) AS biz_name,
+            string_agg(DISTINCT initcap(lower(r.pname)), ', ') AS via,
+            max(b.ucc_count) AS ucc_count, max(b.active_liens) AS active_liens, max(b.tax_liens) AS tax_liens
+     FROM related r JOIN prof_business b ON b.biz_norm = r.biz_norm
+     GROUP BY r.biz_norm
+     ORDER BY max(b.ucc_count) DESC LIMIT 50`,
+    [bizNorm],
+  );
+}
+
 export type BizPrincipal = { name: string; role: string; entity_name: string };
 export function businessPrincipals(bizNorm: string) {
   return q<BizPrincipal>(
