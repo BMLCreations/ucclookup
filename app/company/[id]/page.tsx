@@ -1,6 +1,7 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
-import { DataTable, Stat, Collapsible, StatusPill, TaxBadge, EntityStatusBadge, NextRenewalCallout, ExpiringSoonBadge, isExpiringSoon } from "../../components";
+import { notFound, redirect } from "next/navigation";
+import { DataTable, Stat, Collapsible, StatusPill, TaxBadge, EntityStatusBadge, NextRenewalCallout, ExpiringSoonBadge, isExpiringSoon, LockedSection } from "../../components";
+import { getSessionUser } from "@/lib/auth";
 import {
   businessHeadline, businessFilings, businessPrincipals, businessLiens, relatedCompanies,
   businessRegistry, businessFundersList, businessTimeline,
@@ -10,6 +11,10 @@ import {
 export const dynamic = "force-dynamic";
 
 export default async function CompanyProfile({ params }: { params: Promise<{ id: string }> }) {
+  const user = await getSessionUser();
+  if (!user) redirect("/login");
+  const pro = user.plan === "pro";
+
   const { id } = await params;
   const bizNorm = decodeURIComponent(id);
 
@@ -55,7 +60,7 @@ export default async function CompanyProfile({ params }: { params: Promise<{ id:
         </div>
       )}
 
-      <NextRenewalCallout date={head.next_expiry} />
+      {pro && <NextRenewalCallout date={head.next_expiry} />}
 
       <div className="my-7 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         <Stat label="Total UCC filings" value={head.ucc_count.toLocaleString()} />
@@ -120,21 +125,25 @@ export default async function CompanyProfile({ params }: { params: Promise<{ id:
           />
         </Collapsible>
 
-        <Collapsible
-          title={<>Tax liens &amp; judgments <span className="font-normal text-slate-400">· state, federal &amp; court</span></>}
-          count={liens.length}
-        >
-          <DataTable<LienRow>
-            rows={liens}
-            empty="No tax liens or judgments on record."
-            columns={[
-              { key: "filed", label: "Filed" },
-              { key: "lien_type", label: "Type", className: "font-medium text-slate-900" },
-              { key: "claimant", label: "Claimant", render: (r) => r.claimant || "—" },
-              { key: "status", label: "Status", className: "text-center", render: (r) => <StatusPill status={r.status} /> },
-            ]}
-          />
-        </Collapsible>
+        {pro ? (
+          <Collapsible
+            title={<>Tax liens &amp; judgments <span className="font-normal text-slate-400">· state, federal &amp; court</span></>}
+            count={liens.length}
+          >
+            <DataTable<LienRow>
+              rows={liens}
+              empty="No tax liens or judgments on record."
+              columns={[
+                { key: "filed", label: "Filed" },
+                { key: "lien_type", label: "Type", className: "font-medium text-slate-900" },
+                { key: "claimant", label: "Claimant", render: (r) => r.claimant || "—" },
+                { key: "status", label: "Status", className: "text-center", render: (r) => <StatusPill status={r.status} /> },
+              ]}
+            />
+          </Collapsible>
+        ) : (
+          <LockedSection label="Tax liens & judgments" />
+        )}
 
         <Collapsible
           title={<>People on this business <span className="font-normal text-slate-400">· from the CA business registry</span></>}
@@ -153,24 +162,28 @@ export default async function CompanyProfile({ params }: { params: Promise<{ id:
           />
         </Collapsible>
 
-        <Collapsible
-          title={<>Related companies <span className="font-normal text-slate-400">· share an owner &amp; have UCC filings</span></>}
-          count={related.length}
-        >
-          <DataTable<RelatedCompany>
-            rows={related}
-            empty="No related companies with UCC filings found."
-            columns={[
-              { key: "biz_name", label: "Company", className: "font-medium", render: (r) => (
-                  <Link href={`/company/${encodeURIComponent(r.biz_norm)}`} className="font-medium text-indigo-700 hover:underline">{r.biz_name}</Link>
-                ) },
-              { key: "via", label: "Connected via", render: (r) => <span className="text-slate-500">{r.via}</span> },
-              { key: "ucc_count", label: "Filings", className: "text-center nums" },
-              { key: "active_liens", label: "Active", className: "text-center nums" },
-              { key: "tax_liens", label: "Tax liens", className: "text-center", render: (r) => <TaxBadge n={r.tax_liens} /> },
-            ]}
-          />
-        </Collapsible>
+        {pro ? (
+          <Collapsible
+            title={<>Related companies <span className="font-normal text-slate-400">· share an owner &amp; have UCC filings</span></>}
+            count={related.length}
+          >
+            <DataTable<RelatedCompany>
+              rows={related}
+              empty="No related companies with UCC filings found."
+              columns={[
+                { key: "biz_name", label: "Company", className: "font-medium", render: (r) => (
+                    <Link href={`/company/${encodeURIComponent(r.biz_norm)}`} className="font-medium text-indigo-700 hover:underline">{r.biz_name}</Link>
+                  ) },
+                { key: "via", label: "Connected via", render: (r) => <span className="text-slate-500">{r.via}</span> },
+                { key: "ucc_count", label: "Filings", className: "text-center nums" },
+                { key: "active_liens", label: "Active", className: "text-center nums" },
+                { key: "tax_liens", label: "Tax liens", className: "text-center", render: (r) => <TaxBadge n={r.tax_liens} /> },
+              ]}
+            />
+          </Collapsible>
+        ) : (
+          <LockedSection label="Related companies (owner network)" />
+        )}
       </div>
     </div>
   );

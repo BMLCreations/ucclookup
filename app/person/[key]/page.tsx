@@ -1,6 +1,7 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
-import { DataTable, Stat, Collapsible, StatusPill, NextRenewalCallout, ExpiringSoonBadge, isExpiringSoon } from "../../components";
+import { notFound, redirect } from "next/navigation";
+import { DataTable, Stat, Collapsible, StatusPill, NextRenewalCallout, ExpiringSoonBadge, isExpiringSoon, LockedSection } from "../../components";
+import { getSessionUser } from "@/lib/auth";
 import {
   personHeadline, personFilings, personCompanies, personLiens, personCoOwners,
   type BizFiling, type PersonCompany, type LienRow, type CoOwner,
@@ -9,6 +10,10 @@ import {
 export const dynamic = "force-dynamic";
 
 export default async function PersonProfile({ params }: { params: Promise<{ key: string }> }) {
+  const user = await getSessionUser();
+  if (!user) redirect("/login");
+  const pro = user.plan === "pro";
+
   const { key } = await params;
   const personKey = decodeURIComponent(key);
 
@@ -41,7 +46,7 @@ export default async function PersonProfile({ params }: { params: Promise<{ key:
         </div>
       </div>
 
-      <NextRenewalCallout date={head.next_expiry} />
+      {pro && <NextRenewalCallout date={head.next_expiry} />}
 
       <div className="my-7 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         <Stat label="Total UCC filings" value={head.ucc_count.toLocaleString()} />
@@ -76,21 +81,25 @@ export default async function PersonProfile({ params }: { params: Promise<{ key:
           />
         </Collapsible>
 
-        <Collapsible
-          title={<>Tax liens &amp; judgments <span className="font-normal text-slate-400">· state, federal &amp; court</span></>}
-          count={liens.length}
-        >
-          <DataTable<LienRow>
-            rows={liens}
-            empty="No tax liens or judgments on record."
-            columns={[
-              { key: "filed", label: "Filed" },
-              { key: "lien_type", label: "Type", className: "font-medium text-slate-900" },
-              { key: "claimant", label: "Claimant", render: (r) => r.claimant || "—" },
-              { key: "status", label: "Status", className: "text-center", render: (r) => <StatusPill status={r.status} /> },
-            ]}
-          />
-        </Collapsible>
+        {pro ? (
+          <Collapsible
+            title={<>Tax liens &amp; judgments <span className="font-normal text-slate-400">· state, federal &amp; court</span></>}
+            count={liens.length}
+          >
+            <DataTable<LienRow>
+              rows={liens}
+              empty="No tax liens or judgments on record."
+              columns={[
+                { key: "filed", label: "Filed" },
+                { key: "lien_type", label: "Type", className: "font-medium text-slate-900" },
+                { key: "claimant", label: "Claimant", render: (r) => r.claimant || "—" },
+                { key: "status", label: "Status", className: "text-center", render: (r) => <StatusPill status={r.status} /> },
+              ]}
+            />
+          </Collapsible>
+        ) : (
+          <LockedSection label="Tax liens & judgments" />
+        )}
 
         <Collapsible
           title={<>Companies linked to this person <span className="font-normal text-slate-400">· by name{location && " + city"}</span></>}
@@ -110,22 +119,26 @@ export default async function PersonProfile({ params }: { params: Promise<{ key:
           />
         </Collapsible>
 
-        <Collapsible
-          title={<>Co-owners <span className="font-normal text-slate-400">· people who share a company with this person</span></>}
-          count={coOwners.length}
-        >
-          <DataTable<CoOwner>
-            rows={coOwners}
-            empty="No co-owners found."
-            columns={[
-              { key: "name", label: "Person", className: "font-medium", render: (r) => r.has_profile
-                  ? <Link href={`/person/${encodeURIComponent(r.person_key)}`} className="font-medium text-indigo-700 hover:underline">{r.name}</Link>
-                  : <span className="font-medium text-slate-900">{r.name}</span> },
-              { key: "city", label: "Location", render: (r) => [r.city, r.state].filter(Boolean).join(", ") || "—" },
-              { key: "shared", label: "Shared companies", className: "text-center nums" },
-            ]}
-          />
-        </Collapsible>
+        {pro ? (
+          <Collapsible
+            title={<>Co-owners <span className="font-normal text-slate-400">· people who share a company with this person</span></>}
+            count={coOwners.length}
+          >
+            <DataTable<CoOwner>
+              rows={coOwners}
+              empty="No co-owners found."
+              columns={[
+                { key: "name", label: "Person", className: "font-medium", render: (r) => r.has_profile
+                    ? <Link href={`/person/${encodeURIComponent(r.person_key)}`} className="font-medium text-indigo-700 hover:underline">{r.name}</Link>
+                    : <span className="font-medium text-slate-900">{r.name}</span> },
+                { key: "city", label: "Location", render: (r) => [r.city, r.state].filter(Boolean).join(", ") || "—" },
+                { key: "shared", label: "Shared companies", className: "text-center nums" },
+              ]}
+            />
+          </Collapsible>
+        ) : (
+          <LockedSection label="Co-owners (people network)" />
+        )}
       </div>
     </div>
   );

@@ -1,5 +1,8 @@
 import Link from "next/link";
-import { PageHeader, DataTable, TaxBadge } from "../components";
+import { redirect } from "next/navigation";
+import { PageHeader, DataTable, TaxBadge, UpgradeWall } from "../components";
+import { getSessionUser } from "@/lib/auth";
+import { consumeSearch, FREE_DAILY_SEARCHES, FREE_LEADGEN_ROWS } from "@/lib/usage";
 import {
   searchBusinesses, searchIndividuals,
   type BusinessRow, type IndividualRow, type SearchWindow,
@@ -54,6 +57,10 @@ export default async function LeadsPage({
 }: {
   searchParams: Promise<{ type?: string; min?: string; funders?: string; win?: string; state?: string; city?: string; renew?: string }>;
 }) {
+  const user = await getSessionUser();
+  if (!user) redirect("/login");
+  const pro = user.plan === "pro";
+
   const sp = await searchParams;
   const type = sp.type === "individuals" ? "individuals" : "businesses";
   const min = Math.max(1, Number(sp.min ?? 1) || 1);
@@ -63,11 +70,26 @@ export default async function LeadsPage({
   const city = (sp.city ?? "").trim();
   const renew = [30, 60, 90].includes(Number(sp.renew)) ? Number(sp.renew) : 0;
 
+  // A "search" = the user actually applied a filter (bare /leads landing doesn't count).
+  const didSearch = !!(sp.min || sp.funders || sp.win || sp.state || sp.city || sp.renew || sp.type);
+  let overQuota = false;
+  let used = 0;
+  if (!pro && didSearch) {
+    const quota = await consumeSearch(user.id);
+    overQuota = !quota.allowed;
+    used = quota.used;
+  }
+
   const isIndividuals = type === "individuals";
   const [biz, individuals] = await Promise.all([
-    isIndividuals ? Promise.resolve([] as BusinessRow[]) : searchBusinesses({ minFilings: min, minFunders, window: win, state, city, renewingDays: renew }),
-    isIndividuals ? searchIndividuals({ minFilings: min, minFunders, window: win, state, city, renewingDays: renew }) : Promise.resolve([] as IndividualRow[]),
+    !overQuota && !isIndividuals ? searchBusinesses({ minFilings: min, minFunders, window: win, state, city, renewingDays: renew }) : Promise.resolve([] as BusinessRow[]),
+    !overQuota && isIndividuals ? searchIndividuals({ minFilings: min, minFunders, window: win, state, city, renewingDays: renew }) : Promise.resolve([] as IndividualRow[]),
   ]);
+
+  // Free plan only sees the first few rows; the rest is locked.
+  const shownBiz = pro ? biz : biz.slice(0, FREE_LEADGEN_ROWS);
+  const shownIndividuals = pro ? individuals : individuals.slice(0, FREE_LEADGEN_ROWS);
+  const hidden = isIndividuals ? individuals.length - shownIndividuals.length : biz.length - shownBiz.length;
 
   const winLabel = WINDOWS.find((w) => w.v === win)?.label.toLowerCase();
   const count = isIndividuals ? individuals.length : biz.length;
@@ -120,7 +142,10 @@ export default async function LeadsPage({
               {RENEWALS.map((r) => <option key={r.v} value={r.v}>{r.label}</option>)}
             </select>
           </label>
-          <button type="submit" className="ml-auto rounded-xl bg-indigo-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 active:bg-indigo-800">
+          {!pro && didSearch && !overQuota && (
+            <span className="ml-auto self-center text-xs text-slate-400">Free · {used}/{FREE_DAILY_SEARCHES} searches today</span>
+          )}
+          <button type="submit" className={`${!pro && didSearch && !overQuota ? "" : "ml-auto"} rounded-xl bg-indigo-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 active:bg-indigo-800`}>
             Generate
           </button>
         </div>
@@ -136,49 +161,67 @@ export default async function LeadsPage({
         ))}
       </div>
 
-      <h2 className="mb-3 text-sm font-semibold text-slate-700">
-        {count} {noun}
-        {min > 1 && <> · <span className="text-indigo-700">{min}+</span> filings{win !== "all" && <> in the {winLabel}</>}</>}
-        {minFunders > 0 && <> · <span className="text-indigo-700">{minFunders}+</span> distinct funders</>}
-        {renew > 0 && <> · <span className="text-indigo-700">renewing within {renew} days</span></>}
-        {state && <> · in <span className="text-indigo-700">{state.toUpperCase()}</span></>}
-        {city && <> · <span className="text-indigo-700">{city}</span></>}
-      </h2>
-
-      {isIndividuals ? (
-        <DataTable<IndividualRow>
-          rows={individuals}
-          empty="No individuals match these filters."
-          columns={[
-            { key: "person_name", label: "Individual", className: "font-medium", render: (r) => (
-                <Link href={`/person/${encodeURIComponent(r.person_key)}`} className="font-medium text-indigo-700 hover:underline">{r.person_name}</Link>
-              ) },
-            { key: "city", label: "Location", render: (r) => [r.city, r.state].filter(Boolean).join(", ") || "—" },
-            { key: "ucc_count", label: "Filings", className: "text-center nums" },
-            { key: "active_liens", label: "Active", className: "text-center nums" },
-            { key: "distinct_funders", label: "Funders", className: "text-center nums" },
-            { key: "tax_liens", label: "Tax liens", className: "text-center", render: (r) => <TaxBadge n={r.tax_liens} /> },
-            { key: "next_expiry", label: "Renews", render: (r) => r.next_expiry ?? "—" },
-            { key: "last_filing", label: "Last filing" },
-          ]}
+      {overQuota ? (
+        <UpgradeWall
+          title="You've used your 4 free searches today"
+          message="Upgrade to Pro for unlimited lead generation, all results, and CSV export."
         />
       ) : (
-        <DataTable<BusinessRow>
-          rows={biz}
-          empty="No businesses match these filters."
-          columns={[
-            { key: "biz_name", label: "Business", className: "font-medium", render: (r) => (
-                <Link href={`/company/${encodeURIComponent(r.biz_norm)}`} className="font-medium text-indigo-700 hover:underline">{r.biz_name}</Link>
-              ) },
-            { key: "city", label: "Location", render: (r) => [r.city, r.state].filter(Boolean).join(", ") || "—" },
-            { key: "ucc_count", label: "Filings", className: "text-center nums" },
-            { key: "active_liens", label: "Active", className: "text-center nums" },
-            { key: "distinct_funders", label: "Funders", className: "text-center nums" },
-            { key: "tax_liens", label: "Tax liens", className: "text-center", render: (r) => <TaxBadge n={r.tax_liens} /> },
-            { key: "next_expiry", label: "Renews", render: (r) => r.next_expiry ?? "—" },
-            { key: "last_filing", label: "Last filing" },
-          ]}
-        />
+        <>
+          <h2 className="mb-3 text-sm font-semibold text-slate-700">
+            {count} {noun}
+            {min > 1 && <> · <span className="text-indigo-700">{min}+</span> filings{win !== "all" && <> in the {winLabel}</>}</>}
+            {minFunders > 0 && <> · <span className="text-indigo-700">{minFunders}+</span> distinct funders</>}
+            {renew > 0 && <> · <span className="text-indigo-700">renewing within {renew} days</span></>}
+            {state && <> · in <span className="text-indigo-700">{state.toUpperCase()}</span></>}
+            {city && <> · <span className="text-indigo-700">{city}</span></>}
+          </h2>
+
+          {isIndividuals ? (
+            <DataTable<IndividualRow>
+              rows={shownIndividuals}
+              empty="No individuals match these filters."
+              columns={[
+                { key: "person_name", label: "Individual", className: "font-medium", render: (r) => (
+                    <Link href={`/person/${encodeURIComponent(r.person_key)}`} className="font-medium text-indigo-700 hover:underline">{r.person_name}</Link>
+                  ) },
+                { key: "city", label: "Location", render: (r) => [r.city, r.state].filter(Boolean).join(", ") || "—" },
+                { key: "ucc_count", label: "Filings", className: "text-center nums" },
+                { key: "active_liens", label: "Active", className: "text-center nums" },
+                { key: "distinct_funders", label: "Funders", className: "text-center nums" },
+                { key: "tax_liens", label: "Tax liens", className: "text-center", render: (r) => <TaxBadge n={r.tax_liens} /> },
+                { key: "next_expiry", label: "Renews", render: (r) => r.next_expiry ?? "—" },
+                { key: "last_filing", label: "Last filing" },
+              ]}
+            />
+          ) : (
+            <DataTable<BusinessRow>
+              rows={shownBiz}
+              empty="No businesses match these filters."
+              columns={[
+                { key: "biz_name", label: "Business", className: "font-medium", render: (r) => (
+                    <Link href={`/company/${encodeURIComponent(r.biz_norm)}`} className="font-medium text-indigo-700 hover:underline">{r.biz_name}</Link>
+                  ) },
+                { key: "city", label: "Location", render: (r) => [r.city, r.state].filter(Boolean).join(", ") || "—" },
+                { key: "ucc_count", label: "Filings", className: "text-center nums" },
+                { key: "active_liens", label: "Active", className: "text-center nums" },
+                { key: "distinct_funders", label: "Funders", className: "text-center nums" },
+                { key: "tax_liens", label: "Tax liens", className: "text-center", render: (r) => <TaxBadge n={r.tax_liens} /> },
+                { key: "next_expiry", label: "Renews", render: (r) => r.next_expiry ?? "—" },
+                { key: "last_filing", label: "Last filing" },
+              ]}
+            />
+          )}
+
+          {hidden > 0 && (
+            <div className="mt-3">
+              <UpgradeWall
+                title={`${hidden} more ${hidden === 1 ? "result is" : "results are"} locked`}
+                message={`Free shows the first ${FREE_LEADGEN_ROWS}. Upgrade to Pro to see all ${count} and export them.`}
+              />
+            </div>
+          )}
+        </>
       )}
     </div>
   );

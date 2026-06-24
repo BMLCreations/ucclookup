@@ -146,6 +146,39 @@ export function TaxBadge({ n }: { n: number }) {
   );
 }
 
+// Full-width upgrade wall — shown in place of locked content (e.g. when a Free
+// user is over their daily search limit, or for the rest of a Lead Gen result set).
+export function UpgradeWall({ title, message }: { title: string; message: string }) {
+  return (
+    <div className="rounded-2xl border border-indigo-200 bg-gradient-to-br from-indigo-50 to-white p-8 text-center shadow-sm">
+      <div className="mx-auto grid h-11 w-11 place-items-center rounded-xl bg-indigo-100 text-indigo-600">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-5 w-5">
+          <rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" />
+        </svg>
+      </div>
+      <h3 className="mt-3 text-base font-semibold text-slate-900">{title}</h3>
+      <p className="mx-auto mt-1 max-w-md text-sm text-slate-500">{message}</p>
+      <a href="/pricing" className="mt-4 inline-flex rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700">
+        Upgrade to Pro
+      </a>
+    </div>
+  );
+}
+
+// A locked stand-in for a premium profile section (Free users see the lock,
+// not the data — so they know there's more behind the Pro wall).
+export function LockedSection({ label }: { label: string }) {
+  return (
+    <a href="/pricing" className="flex items-center gap-2 rounded-xl border border-dashed border-indigo-200 bg-indigo-50/40 px-4 py-3 text-sm transition hover:border-indigo-300 hover:bg-indigo-50">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4 text-indigo-500">
+        <rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" />
+      </svg>
+      <span className="font-semibold text-slate-700">{label}</span>
+      <span className="ml-auto text-xs font-medium text-indigo-600">Upgrade to Pro →</span>
+    </a>
+  );
+}
+
 // A lien is "expiring soon" if it's still Active and lapses within ~90 days.
 export function isExpiringSoon(status: string, lapse: string): boolean {
   if (status !== "Active" || !lapse) return false;

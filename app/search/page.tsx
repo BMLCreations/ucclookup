@@ -1,5 +1,8 @@
 import Link from "next/link";
-import { PageHeader, DataTable, TaxBadge } from "../components";
+import { redirect } from "next/navigation";
+import { PageHeader, DataTable, TaxBadge, UpgradeWall } from "../components";
+import { getSessionUser } from "@/lib/auth";
+import { consumeSearch, FREE_DAILY_SEARCHES } from "@/lib/usage";
 import {
   searchBusinesses, searchIndividuals,
   type BusinessRow, type IndividualRow,
@@ -24,17 +27,31 @@ export default async function SearchPage({
 }: {
   searchParams: Promise<{ q?: string; funder?: string; person?: string }>;
 }) {
+  const user = await getSessionUser();
+  if (!user) redirect("/login");
+  const pro = user.plan === "pro";
+
   const sp = await searchParams;
   const q = (sp.q ?? "").trim();
   const funder = (sp.funder ?? "").trim();
   const person = (sp.person ?? "").trim();
+  const didSearch = !!(q || funder || person);
+
+  // Free plan: each name lookup counts against the daily quota.
+  let overQuota = false;
+  let used = 0;
+  if (!pro && didSearch) {
+    const quota = await consumeSearch(user.id);
+    overQuota = !quota.allowed;
+    used = quota.used;
+  }
 
   // If an individual name is entered, search PEOPLE. Otherwise search BUSINESSES.
   // Pure name lookup — activity/leverage live on the profile, not here.
   const individualMode = !!person;
   const [biz, individuals] = await Promise.all([
-    individualMode ? Promise.resolve([] as BusinessRow[]) : searchBusinesses({ name: q, funder }),
-    individualMode ? searchIndividuals({ name: person }) : Promise.resolve([] as IndividualRow[]),
+    !overQuota && !individualMode ? searchBusinesses({ name: q, funder }) : Promise.resolve([] as BusinessRow[]),
+    !overQuota && individualMode ? searchIndividuals({ name: person }) : Promise.resolve([] as IndividualRow[]),
   ]);
 
   return (
@@ -50,14 +67,22 @@ export default async function SearchPage({
           <Field name="person" label="Individual" value={person} placeholder="e.g. John Smith" />
           <Field name="funder" label="Secured party / creditor" value={funder} placeholder="e.g. Forward Financing" />
         </div>
-        <div className="mt-4 flex">
+        <div className="mt-4 flex items-center gap-3">
+          {!pro && didSearch && !overQuota && (
+            <span className="text-xs text-slate-400">Free plan · {used} of {FREE_DAILY_SEARCHES} daily searches used</span>
+          )}
           <button type="submit" className="ml-auto rounded-xl bg-indigo-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 active:bg-indigo-800">
             Search
           </button>
         </div>
       </form>
 
-      {individualMode ? (
+      {overQuota ? (
+        <UpgradeWall
+          title="You've used your 4 free searches today"
+          message="Upgrade to Pro for unlimited searches, full Lead Generation, and complete profiles."
+        />
+      ) : individualMode ? (
         <section>
           <h2 className="mb-3 text-sm font-semibold text-slate-700">
             {individuals.length} {individuals.length === 1 ? "individual" : "individuals"} matching &ldquo;{person}&rdquo;

@@ -1,18 +1,23 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
-import { DataTable, Stat } from "../../components";
+import { notFound, redirect } from "next/navigation";
+import { DataTable, Stat, UpgradeWall } from "../../components";
+import { getSessionUser } from "@/lib/auth";
 import { funderHeadline, funderMerchants, type FunderMerchant } from "@/lib/features";
 
 export const dynamic = "force-dynamic";
 
 export default async function FunderProfile({ params }: { params: Promise<{ name: string }> }) {
+  const user = await getSessionUser();
+  if (!user) redirect("/login");
+  const pro = user.plan === "pro";
+
   const { name } = await params;
   const funderNorm = decodeURIComponent(name);
 
   const [head] = await funderHeadline(funderNorm);
   if (!head || head.total === 0) notFound();
 
-  const merchants = await funderMerchants(funderNorm);
+  const merchants = pro ? await funderMerchants(funderNorm) : [];
 
   return (
     <div>
@@ -39,18 +44,25 @@ export default async function FunderProfile({ params }: { params: Promise<{ name
       <h2 className="mb-3 text-sm font-semibold text-slate-700">
         Merchants funded <span className="font-normal text-slate-400">· this funder&apos;s book</span>
       </h2>
-      <DataTable<FunderMerchant>
-        rows={merchants}
-        empty="No merchants on record."
-        columns={[
-          { key: "merchant", label: "Merchant", className: "font-medium", render: (r) => (
-              <Link href={`/company/${encodeURIComponent(r.biz_norm)}`} className="font-medium text-indigo-700 hover:underline">{r.merchant}</Link>
-            ) },
-          { key: "city", label: "Location", render: (r) => [r.city, r.state].filter(Boolean).join(", ") || "—" },
-          { key: "liens", label: "Liens", className: "text-center nums" },
-          { key: "last_filing", label: "Last filing" },
-        ]}
-      />
+      {pro ? (
+        <DataTable<FunderMerchant>
+          rows={merchants}
+          empty="No merchants on record."
+          columns={[
+            { key: "merchant", label: "Merchant", className: "font-medium", render: (r) => (
+                <Link href={`/company/${encodeURIComponent(r.biz_norm)}`} className="font-medium text-indigo-700 hover:underline">{r.merchant}</Link>
+              ) },
+            { key: "city", label: "Location", render: (r) => [r.city, r.state].filter(Boolean).join(", ") || "—" },
+            { key: "liens", label: "Liens", className: "text-center nums" },
+            { key: "last_filing", label: "Last filing" },
+          ]}
+        />
+      ) : (
+        <UpgradeWall
+          title={`See every merchant ${head.funder_name} has funded`}
+          message="Funder books — a competitor's full portfolio — are a Pro feature. Upgrade to unlock."
+        />
+      )}
     </div>
   );
 }

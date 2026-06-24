@@ -43,6 +43,11 @@ export function NavBar({ user }: { user: { email: string; plan: string } | null 
         <div className="ml-auto flex items-center gap-2.5 text-sm">
           {user ? (
             <>
+              {user.plan !== "pro" && (
+                <Link href="/pricing" className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-indigo-700">
+                  Upgrade
+                </Link>
+              )}
               <span className={`hidden rounded-full px-2 py-0.5 text-xs font-semibold ring-1 ring-inset sm:inline ${
                 user.plan === "pro"
                   ? "bg-indigo-50 text-indigo-700 ring-indigo-600/20"
