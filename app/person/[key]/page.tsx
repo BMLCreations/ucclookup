@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { DataTable, Stat, Collapsible, StatusPill } from "../../components";
+import { DataTable, Stat, Collapsible, StatusPill, NextRenewalCallout, ExpiringSoonBadge, isExpiringSoon } from "../../components";
 import {
   personHeadline, personFilings, personCompanies, personLiens, personCoOwners,
   type BizFiling, type PersonCompany, type LienRow, type CoOwner,
@@ -41,6 +41,8 @@ export default async function PersonProfile({ params }: { params: Promise<{ key:
         </div>
       </div>
 
+      <NextRenewalCallout date={head.next_expiry} />
+
       <div className="my-7 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         <Stat label="Total UCC filings" value={head.ucc_count.toLocaleString()} />
         <Stat label="Distinct funders" value={head.distinct_funders.toLocaleString()} />
@@ -65,7 +67,9 @@ export default async function PersonProfile({ params }: { params: Promise<{ key:
                   </div>
                 ) },
               { key: "status", label: "Status", className: "text-center", render: (r) => <StatusPill status={r.status} /> },
-              { key: "lapse", label: "Lapse / Expiration date" },
+              { key: "lapse", label: "Lapse / Expiration date", render: (r) => (
+                  <span>{r.lapse || "—"}{isExpiringSoon(r.status, r.lapse) && <ExpiringSoonBadge />}</span>
+                ) },
               { key: "debtor_addr", label: "Debtor address", render: (r) => <span className="text-slate-500">{r.debtor_addr || "—"}</span> },
               { key: "filing_num", label: "Filing #", render: (r) => <span className="text-xs text-slate-400">{r.filing_num}</span> },
             ]}

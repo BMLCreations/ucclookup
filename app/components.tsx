@@ -146,6 +146,39 @@ export function TaxBadge({ n }: { n: number }) {
   );
 }
 
+// A lien is "expiring soon" if it's still Active and lapses within ~90 days.
+export function isExpiringSoon(status: string, lapse: string): boolean {
+  if (status !== "Active" || !lapse) return false;
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const days = (new Date(lapse + "T00:00:00").getTime() - today.getTime()) / 86_400_000;
+  return days >= 0 && days <= 90;
+}
+
+export function ExpiringSoonBadge() {
+  return (
+    <span className="ml-2 inline-flex rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700 ring-1 ring-inset ring-amber-600/20">
+      Expiring soon
+    </span>
+  );
+}
+
+// Headline callout: when does this entity's soonest still-live advance mature?
+export function NextRenewalCallout({ date }: { date: string | null }) {
+  if (!date) return null;
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const days = Math.round((new Date(date + "T00:00:00").getTime() - today.getTime()) / 86_400_000);
+  if (days < 0) return null;
+  return (
+    <div className="mt-3 inline-flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-4 w-4 text-amber-600">
+        <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" />
+      </svg>
+      <span className="font-semibold text-amber-700">Next renewal</span>
+      <span className="text-amber-700">{date} · in {days} day{days === 1 ? "" : "s"}</span>
+    </div>
+  );
+}
+
 // CA business-registry status — Active (green), Suspended/Forfeited (red),
 // everything else terminated/inactive/merged (slate).
 export function EntityStatusBadge({ status }: { status: string }) {

@@ -193,7 +193,7 @@ export function searchIndividuals(opts: {
 export function businessHeadline(bizNorm: string) {
   return q<BusinessRow>(
     `SELECT biz_norm, biz_name, city, state, ucc_count, ucc_6mo, ucc_12mo,
-            last_filing::text AS last_filing, distinct_funders
+            last_filing::text AS last_filing, distinct_funders, next_expiry::text AS next_expiry
      FROM prof_business WHERE biz_norm = $1 LIMIT 1`,
     [bizNorm],
   );
@@ -429,7 +429,7 @@ export function funderMerchants(funderNorm: string) {
 export function personHeadline(personKey: string) {
   return q<IndividualRow>(
     `SELECT person_key, person_name, city, state, ucc_count, ucc_6mo, ucc_12mo,
-            last_filing::text AS last_filing, distinct_funders
+            last_filing::text AS last_filing, distinct_funders, next_expiry::text AS next_expiry
      FROM prof_individual WHERE person_key = $1 LIMIT 1`,
     [personKey],
   );
