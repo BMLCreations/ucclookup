@@ -2,8 +2,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { DataTable, Stat, Collapsible, StatusPill } from "../../components";
 import {
-  personHeadline, personFilings, personCompanies, personLiens,
-  type BizFiling, type PersonCompany, type LienRow,
+  personHeadline, personFilings, personCompanies, personLiens, personCoOwners,
+  type BizFiling, type PersonCompany, type LienRow, type CoOwner,
 } from "@/lib/features";
 
 export const dynamic = "force-dynamic";
@@ -15,10 +15,11 @@ export default async function PersonProfile({ params }: { params: Promise<{ key:
   const [head] = await personHeadline(personKey);
   if (!head) notFound();
 
-  const [filings, companies, liens] = await Promise.all([
+  const [filings, companies, liens, coOwners] = await Promise.all([
     personFilings(personKey),
     personCompanies(personKey),
     personLiens(personKey),
+    personCoOwners(personKey),
   ]);
 
   const location = [head.city, head.state].filter(Boolean).join(", ");
@@ -99,6 +100,23 @@ export default async function PersonProfile({ params }: { params: Promise<{ key:
               { key: "entity_type", label: "Type", render: (r) => <span className="text-slate-500">{r.entity_type || "—"}</span> },
               { key: "role", label: "Role" },
               { key: "city", label: "Location", render: (r) => [r.city, r.state].filter(Boolean).join(", ") || "—" },
+            ]}
+          />
+        </Collapsible>
+
+        <Collapsible
+          title={<>Co-owners <span className="font-normal text-slate-400">· people who share a company with this person</span></>}
+          count={coOwners.length}
+        >
+          <DataTable<CoOwner>
+            rows={coOwners}
+            empty="No co-owners found."
+            columns={[
+              { key: "name", label: "Person", className: "font-medium", render: (r) => r.has_profile
+                  ? <Link href={`/person/${encodeURIComponent(r.person_key)}`} className="font-medium text-indigo-700 hover:underline">{r.name}</Link>
+                  : <span className="font-medium text-slate-900">{r.name}</span> },
+              { key: "city", label: "Location", render: (r) => [r.city, r.state].filter(Boolean).join(", ") || "—" },
+              { key: "shared", label: "Shared companies", className: "text-center nums" },
             ]}
           />
         </Collapsible>
