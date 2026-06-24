@@ -94,7 +94,9 @@ export default async function CompanyProfile({ params }: { params: Promise<{ id:
             rows={principals}
             empty="No matching registry record (this business may file under a different legal name)."
             columns={[
-              { key: "name", label: "Person", className: "font-medium text-slate-900" },
+              { key: "name", label: "Person", className: "font-medium", render: (r) => r.has_profile
+                  ? <Link href={`/person/${encodeURIComponent(r.person_key)}`} className="font-medium text-indigo-700 hover:underline">{r.name}</Link>
+                  : <span className="font-medium text-slate-900">{r.name}</span> },
               { key: "role", label: "Role" },
               { key: "entity_name", label: "Registered entity", render: (r) => <span className="text-slate-500">{r.entity_name}</span> },
             ]}
