@@ -1,6 +1,5 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
-import { PageHeader, DataTable, TaxBadge, UpgradeWall } from "../components";
+import { PageHeader, DataTable, TaxBadge, UpgradeWall, LoginGate } from "../components";
 import { getSessionUser } from "@/lib/auth";
 import { consumeSearch, FREE_DAILY_SEARCHES, FREE_LEADGEN_ROWS } from "@/lib/usage";
 import {
@@ -58,8 +57,8 @@ export default async function LeadsPage({
   searchParams: Promise<{ type?: string; min?: string; funders?: string; win?: string; state?: string; city?: string; renew?: string }>;
 }) {
   const user = await getSessionUser();
-  if (!user) redirect("/login");
-  const pro = user.plan === "pro";
+  const loggedOut = !user;
+  const pro = user?.plan === "pro";
 
   const sp = await searchParams;
   const type = sp.type === "individuals" ? "individuals" : "businesses";
@@ -74,16 +73,17 @@ export default async function LeadsPage({
   const didSearch = !!(sp.min || sp.funders || sp.win || sp.state || sp.city || sp.renew || sp.type);
   let overQuota = false;
   let used = 0;
-  if (!pro && didSearch) {
+  if (user && !pro && didSearch) {
     const quota = await consumeSearch(user.id);
     overQuota = !quota.allowed;
     used = quota.used;
   }
 
   const isIndividuals = type === "individuals";
+  const canSearch = !!user && !overQuota;
   const [biz, individuals] = await Promise.all([
-    !overQuota && !isIndividuals ? searchBusinesses({ minFilings: min, minFunders, window: win, state, city, renewingDays: renew }) : Promise.resolve([] as BusinessRow[]),
-    !overQuota && isIndividuals ? searchIndividuals({ minFilings: min, minFunders, window: win, state, city, renewingDays: renew }) : Promise.resolve([] as IndividualRow[]),
+    canSearch && !isIndividuals ? searchBusinesses({ minFilings: min, minFunders, window: win, state, city, renewingDays: renew }) : Promise.resolve([] as BusinessRow[]),
+    canSearch && isIndividuals ? searchIndividuals({ minFilings: min, minFunders, window: win, state, city, renewingDays: renew }) : Promise.resolve([] as IndividualRow[]),
   ]);
 
   // Free plan only sees the first few rows; the rest is locked.
@@ -161,7 +161,9 @@ export default async function LeadsPage({
         ))}
       </div>
 
-      {overQuota ? (
+      {loggedOut ? (
+        <LoginGate />
+      ) : overQuota ? (
         <UpgradeWall
           title="You've used your 4 free searches today"
           message="Upgrade to Pro for unlimited lead generation, all results, and CSV export."

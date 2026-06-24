@@ -165,6 +165,58 @@ export function UpgradeWall({ title, message }: { title: string; message: string
   );
 }
 
+// Logged-out teaser: blurred placeholder rows behind a "log in to search" card.
+// Uses fake names only (no real data is sent to the browser).
+export function LoginGate() {
+  const fake = [
+    "Sierra Freight LLC", "Golden State Foods Inc", "Pacific Auto Group", "Valley Logistics Co",
+    "Harbor Bakery LLC", "Summit Capital Partners", "Redwood Holdings", "Coastal Services Inc",
+  ];
+  return (
+    <div className="relative">
+      <div aria-hidden className="pointer-events-none select-none blur-[5px]">
+        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-slate-200 bg-slate-50/80 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                <th className="px-4 py-3">Business</th><th className="px-4 py-3">Location</th>
+                <th className="px-4 py-3 text-center">Filings</th><th className="px-4 py-3 text-center">Funders</th>
+                <th className="px-4 py-3">Last filing</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {fake.map((n, i) => (
+                <tr key={i}>
+                  <td className="px-4 py-3 font-medium text-indigo-700">{n}</td>
+                  <td className="px-4 py-3 text-slate-700">Los Angeles, CA</td>
+                  <td className="px-4 py-3 text-center nums">{9 - i}</td>
+                  <td className="px-4 py-3 text-center nums">{5 - (i % 4)}</td>
+                  <td className="px-4 py-3 text-slate-700">2026-0{(i % 9) + 1}-1{i % 9}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div className="absolute inset-0 grid place-items-center px-4">
+        <div className="max-w-sm rounded-2xl border border-slate-200 bg-white/95 p-6 text-center shadow-lg backdrop-blur-sm">
+          <div className="mx-auto grid h-11 w-11 place-items-center rounded-xl bg-indigo-100 text-indigo-600">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-5 w-5">
+              <rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" />
+            </svg>
+          </div>
+          <h3 className="mt-3 text-base font-semibold text-slate-900">Log in to search</h3>
+          <p className="mx-auto mt-1 text-sm text-slate-500">Create a free account to look up businesses, owners, and funders across California.</p>
+          <div className="mt-4 flex justify-center gap-2">
+            <a href="/signup" className="rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700">Sign up free</a>
+            <a href="/login" className="rounded-xl border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">Log in</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // A locked stand-in for a premium profile section (Free users see the lock,
 // not the data — so they know there's more behind the Pro wall).
 export function LockedSection({ label }: { label: string }) {

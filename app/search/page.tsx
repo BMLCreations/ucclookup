@@ -1,6 +1,5 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
-import { PageHeader, DataTable, TaxBadge, UpgradeWall } from "../components";
+import { PageHeader, DataTable, TaxBadge, UpgradeWall, LoginGate } from "../components";
 import { getSessionUser } from "@/lib/auth";
 import { consumeSearch, FREE_DAILY_SEARCHES } from "@/lib/usage";
 import {
@@ -28,8 +27,8 @@ export default async function SearchPage({
   searchParams: Promise<{ q?: string; funder?: string; person?: string }>;
 }) {
   const user = await getSessionUser();
-  if (!user) redirect("/login");
-  const pro = user.plan === "pro";
+  const loggedOut = !user;
+  const pro = user?.plan === "pro";
 
   const sp = await searchParams;
   const q = (sp.q ?? "").trim();
@@ -37,21 +36,21 @@ export default async function SearchPage({
   const person = (sp.person ?? "").trim();
   const didSearch = !!(q || funder || person);
 
-  // Free plan: each name lookup counts against the daily quota.
+  // Free plan: each name lookup counts against the daily quota (logged-in only).
   let overQuota = false;
   let used = 0;
-  if (!pro && didSearch) {
+  if (user && !pro && didSearch) {
     const quota = await consumeSearch(user.id);
     overQuota = !quota.allowed;
     used = quota.used;
   }
 
-  // If an individual name is entered, search PEOPLE. Otherwise search BUSINESSES.
-  // Pure name lookup — activity/leverage live on the profile, not here.
+  // Only run queries for logged-in users within quota.
   const individualMode = !!person;
+  const canSearch = !!user && !overQuota;
   const [biz, individuals] = await Promise.all([
-    !overQuota && !individualMode ? searchBusinesses({ name: q, funder }) : Promise.resolve([] as BusinessRow[]),
-    !overQuota && individualMode ? searchIndividuals({ name: person }) : Promise.resolve([] as IndividualRow[]),
+    canSearch && !individualMode ? searchBusinesses({ name: q, funder }) : Promise.resolve([] as BusinessRow[]),
+    canSearch && individualMode ? searchIndividuals({ name: person }) : Promise.resolve([] as IndividualRow[]),
   ]);
 
   return (
@@ -77,7 +76,9 @@ export default async function SearchPage({
         </div>
       </form>
 
-      {overQuota ? (
+      {loggedOut ? (
+        <LoginGate />
+      ) : overQuota ? (
         <UpgradeWall
           title="You've used your 4 free searches today"
           message="Upgrade to Pro for unlimited searches, full Lead Generation, and complete profiles."
