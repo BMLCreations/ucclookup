@@ -165,7 +165,7 @@ export default async function LeadsPage({
         <LoginGate />
       ) : overQuota ? (
         <UpgradeWall
-          title="You've used your 4 free searches today"
+          title={`You've used your ${FREE_DAILY_SEARCHES} free searches today`}
           message="Upgrade to Pro for unlimited lead generation, all results, and CSV export."
         />
       ) : (

@@ -3,7 +3,7 @@
 import "server-only";
 import { q } from "./db";
 
-export const FREE_DAILY_SEARCHES = 4;
+export const FREE_DAILY_SEARCHES = 2;
 export const FREE_LEADGEN_ROWS = 8;
 
 // Count one search against today's quota; returns whether it's still allowed.

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { DataTable, Stat, Collapsible, StatusPill, TaxBadge, EntityStatusBadge, NextRenewalCallout, ExpiringSoonBadge, isExpiringSoon, LockedSection } from "../../components";
 import { getSessionUser } from "@/lib/auth";
+import { BackButton } from "../../back-button";
 import {
   businessHeadline, businessFilings, businessPrincipals, businessLiens, relatedCompanies,
   businessRegistry, businessFundersList, businessTimeline,
@@ -38,9 +39,7 @@ export default async function CompanyProfile({ params }: { params: Promise<{ id:
 
   return (
     <div>
-      <Link href="/search" className="text-sm font-medium text-slate-500 transition hover:text-slate-800">
-        ← Back to search
-      </Link>
+      <BackButton />
 
       <div className="mt-4 flex items-center gap-3">
         <span className="grid h-11 w-11 place-items-center rounded-xl bg-indigo-50 text-lg font-bold text-indigo-600">

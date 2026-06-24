@@ -80,7 +80,7 @@ export default async function SearchPage({
         <LoginGate />
       ) : overQuota ? (
         <UpgradeWall
-          title="You've used your 4 free searches today"
+          title={`You've used your ${FREE_DAILY_SEARCHES} free searches today`}
           message="Upgrade to Pro for unlimited searches, full Lead Generation, and complete profiles."
         />
       ) : individualMode ? (

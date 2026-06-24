@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { DataTable, Stat, UpgradeWall } from "../../components";
 import { getSessionUser } from "@/lib/auth";
+import { BackButton } from "../../back-button";
 import { funderHeadline, funderMerchants, type FunderMerchant } from "@/lib/features";
 
 export const dynamic = "force-dynamic";
@@ -21,9 +22,7 @@ export default async function FunderProfile({ params }: { params: Promise<{ name
 
   return (
     <div>
-      <Link href="/search" className="text-sm font-medium text-slate-500 transition hover:text-slate-800">
-        ← Back to search
-      </Link>
+      <BackButton />
 
       <div className="mt-4 flex items-center gap-3">
         <span className="grid h-11 w-11 place-items-center rounded-xl bg-emerald-50 text-lg font-bold text-emerald-600">

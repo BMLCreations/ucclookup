@@ -1,12 +1,13 @@
 import Link from "next/link";
 import { getSessionUser } from "@/lib/auth";
 import { startCheckout } from "@/lib/billing-actions";
+import { FREE_DAILY_SEARCHES } from "@/lib/usage";
 
 export const dynamic = "force-dynamic";
 
 const FREE = [
   "UCC Search — look up any business or person",
-  "4 searches per day",
+  `${FREE_DAILY_SEARCHES} searches per day`,
   "View profiles (basic details)",
   "Lead Generation — preview of 8 results per search",
 ];
