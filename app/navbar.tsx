@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { logoutAction } from "@/lib/auth-actions";
 
 const links = [
   { href: "/", label: "Dashboard" },
@@ -8,7 +9,7 @@ const links = [
   { href: "/leads", label: "Lead Gen" },
 ];
 
-export function NavBar() {
+export function NavBar({ user }: { user: { email: string; plan: string } | null }) {
   const path = usePathname();
   return (
     <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/85 backdrop-blur-md">
@@ -39,13 +40,34 @@ export function NavBar() {
           })}
         </nav>
 
-        <span className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600">
-          <span className="relative flex h-1.5 w-1.5">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-            <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
-          </span>
-          California · Live
-        </span>
+        <div className="ml-auto flex items-center gap-2.5 text-sm">
+          {user ? (
+            <>
+              <span className={`hidden rounded-full px-2 py-0.5 text-xs font-semibold ring-1 ring-inset sm:inline ${
+                user.plan === "pro"
+                  ? "bg-indigo-50 text-indigo-700 ring-indigo-600/20"
+                  : "bg-slate-100 text-slate-500 ring-slate-400/20"
+              }`}>
+                {user.plan === "pro" ? "Pro" : "Free"}
+              </span>
+              <span className="hidden max-w-[160px] truncate text-slate-500 sm:inline">{user.email}</span>
+              <form action={logoutAction}>
+                <button type="submit" className="rounded-lg px-3 py-1.5 font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-900">
+                  Log out
+                </button>
+              </form>
+            </>
+          ) : (
+            <>
+              <Link href="/login" className="rounded-lg px-3 py-1.5 font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-900">
+                Log in
+              </Link>
+              <Link href="/signup" className="rounded-lg bg-indigo-600 px-3 py-1.5 font-semibold text-white shadow-sm transition hover:bg-indigo-700">
+                Sign up
+              </Link>
+            </>
+          )}
+        </div>
       </div>
     </header>
   );
