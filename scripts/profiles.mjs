@@ -94,7 +94,6 @@ try {
              count(DISTINCT funder_norm) FILTER (WHERE funder_norm IS NOT NULL)::int AS distinct_funders
       FROM liens
       GROUP BY name_norm, city, state`);
-    await step("  idx ind person_key", "CREATE UNIQUE INDEX ON prof_individual (person_key)");
     await step("  idx ind ucc_count", "CREATE INDEX ON prof_individual (ucc_count DESC)");
     await step("  idx ind ucc_6mo",   "CREATE INDEX ON prof_individual (ucc_6mo DESC)");
     await step("  idx ind ucc_12mo",  "CREATE INDEX ON prof_individual (ucc_12mo DESC)");
