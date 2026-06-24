@@ -14,11 +14,19 @@ const WINDOWS: { v: SearchWindow; label: string }[] = [
   { v: "3mo", label: "Last 3 months" },
 ];
 
+const RENEWALS: { v: number; label: string }[] = [
+  { v: 0, label: "Any time" },
+  { v: 30, label: "Next 30 days" },
+  { v: 60, label: "Next 60 days" },
+  { v: 90, label: "Next 90 days" },
+];
+
 // Discovery starting points — pure filter combinations, no names.
 const PRESETS = [
   { label: "Stacked · 3+ funders", href: "/leads?funders=3" },
   { label: "Heavily stacked · 5+ funders", href: "/leads?funders=5" },
   { label: "Active last 6 mo · 3+ filings", href: "/leads?min=3&win=6mo" },
+  { label: "Renewing · next 90 days", href: "/leads?renew=90" },
 ];
 
 function NumField({ name, label, value, min }: { name: string; label: string; value: number; min: number }) {
@@ -44,7 +52,7 @@ function TextField({ name, label, value, placeholder, width }: { name: string; l
 export default async function LeadsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ type?: string; min?: string; funders?: string; win?: string; state?: string; city?: string }>;
+  searchParams: Promise<{ type?: string; min?: string; funders?: string; win?: string; state?: string; city?: string; renew?: string }>;
 }) {
   const sp = await searchParams;
   const type = sp.type === "individuals" ? "individuals" : "businesses";
@@ -53,11 +61,12 @@ export default async function LeadsPage({
   const win = (["all", "3mo", "6mo", "12mo"].includes(sp.win ?? "") ? sp.win : "all") as SearchWindow;
   const state = (sp.state ?? "").trim();
   const city = (sp.city ?? "").trim();
+  const renew = [30, 60, 90].includes(Number(sp.renew)) ? Number(sp.renew) : 0;
 
   const isIndividuals = type === "individuals";
   const [biz, individuals] = await Promise.all([
-    isIndividuals ? Promise.resolve([] as BusinessRow[]) : searchBusinesses({ minFilings: min, minFunders, window: win, state, city }),
-    isIndividuals ? searchIndividuals({ minFilings: min, minFunders, window: win, state, city }) : Promise.resolve([] as IndividualRow[]),
+    isIndividuals ? Promise.resolve([] as BusinessRow[]) : searchBusinesses({ minFilings: min, minFunders, window: win, state, city, renewingDays: renew }),
+    isIndividuals ? searchIndividuals({ minFilings: min, minFunders, window: win, state, city, renewingDays: renew }) : Promise.resolve([] as IndividualRow[]),
   ]);
 
   const winLabel = WINDOWS.find((w) => w.v === win)?.label.toLowerCase();
@@ -68,6 +77,7 @@ export default async function LeadsPage({
     const params = new URLSearchParams({ type: t, min: String(min), funders: String(minFunders), win });
     if (state) params.set("state", state);
     if (city) params.set("city", city);
+    if (renew) params.set("renew", String(renew));
     const active = type === t;
     return (
       <Link href={`/leads?${params.toString()}`}
@@ -103,6 +113,13 @@ export default async function LeadsPage({
           </label>
           <TextField name="state" label="State" value={state} placeholder="CA" width="w-24" />
           <TextField name="city" label="City" value={city} placeholder="e.g. Los Angeles" width="w-48" />
+          <label className="block">
+            <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Renewing</span>
+            <select name="renew" defaultValue={String(renew)}
+              className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm shadow-sm outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100">
+              {RENEWALS.map((r) => <option key={r.v} value={r.v}>{r.label}</option>)}
+            </select>
+          </label>
           <button type="submit" className="ml-auto rounded-xl bg-indigo-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 active:bg-indigo-800">
             Generate
           </button>
@@ -123,6 +140,7 @@ export default async function LeadsPage({
         {count} {noun}
         {min > 1 && <> · <span className="text-indigo-700">{min}+</span> filings{win !== "all" && <> in the {winLabel}</>}</>}
         {minFunders > 0 && <> · <span className="text-indigo-700">{minFunders}+</span> distinct funders</>}
+        {renew > 0 && <> · <span className="text-indigo-700">renewing within {renew} days</span></>}
         {state && <> · in <span className="text-indigo-700">{state.toUpperCase()}</span></>}
         {city && <> · <span className="text-indigo-700">{city}</span></>}
       </h2>
@@ -140,6 +158,7 @@ export default async function LeadsPage({
             { key: "active_liens", label: "Active", className: "text-center nums" },
             { key: "distinct_funders", label: "Funders", className: "text-center nums" },
             { key: "tax_liens", label: "Tax liens", className: "text-center", render: (r) => <TaxBadge n={r.tax_liens} /> },
+            { key: "next_expiry", label: "Renews", render: (r) => r.next_expiry ?? "—" },
             { key: "last_filing", label: "Last filing" },
           ]}
         />
@@ -156,6 +175,7 @@ export default async function LeadsPage({
             { key: "active_liens", label: "Active", className: "text-center nums" },
             { key: "distinct_funders", label: "Funders", className: "text-center nums" },
             { key: "tax_liens", label: "Tax liens", className: "text-center", render: (r) => <TaxBadge n={r.tax_liens} /> },
+            { key: "next_expiry", label: "Renews", render: (r) => r.next_expiry ?? "—" },
             { key: "last_filing", label: "Last filing" },
           ]}
         />

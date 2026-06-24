@@ -107,7 +107,7 @@ export type BusinessRow = {
   biz_norm: string; biz_name: string; city: string; state: string;
   ucc_count: number; ucc_6mo: number; ucc_12mo: number;
   last_filing: string; distinct_funders: number;
-  active_liens: number; tax_liens: number;
+  active_liens: number; tax_liens: number; next_expiry: string | null;
 };
 
 export type SearchWindow = "all" | "3mo" | "6mo" | "12mo";
@@ -120,7 +120,7 @@ const WINDOW_COL: Record<SearchWindow, string> = {
 // Used by UCC Search (name-led lookup) and Lead Gen (filter-led discovery, no name/funder).
 export function searchBusinesses(opts: {
   name?: string; funder?: string; minFilings?: number; minFunders?: number;
-  window?: SearchWindow; state?: string; city?: string;
+  window?: SearchWindow; state?: string; city?: string; renewingDays?: number;
 }) {
   const name = (opts.name ?? "").trim();
   const funder = (opts.funder ?? "").trim();
@@ -128,10 +128,12 @@ export function searchBusinesses(opts: {
   const city = (opts.city ?? "").trim();
   const minFilings = Math.max(1, Number(opts.minFilings) || 1);
   const minFunders = Math.max(0, Number(opts.minFunders) || 0); // stacking signal (distinct funders)
+  const renewingDays = Math.max(0, Number(opts.renewingDays) || 0); // renewal radar window
   const col = WINDOW_COL[opts.window ?? "all"] ?? "ucc_count"; // whitelisted, safe to interpolate
   return q<BusinessRow>(
     `SELECT biz_norm, biz_name, city, state, ucc_count, ucc_6mo, ucc_12mo,
-            last_filing::text AS last_filing, distinct_funders, active_liens, tax_liens
+            last_filing::text AS last_filing, distinct_funders, active_liens, tax_liens,
+            next_expiry::text AS next_expiry
      FROM prof_business
      WHERE ${col} >= $1
        AND distinct_funders >= $4
@@ -141,9 +143,11 @@ export function searchBusinesses(opts: {
              WHERE funder_norm = normalize_name($3)))
        AND ($5 = '' OR upper(state) = upper($5))
        AND ($6 = '' OR city ILIKE '%' || $6 || '%')
-     ORDER BY ${col} DESC, distinct_funders DESC
+       AND ($7 = 0 OR (next_expiry IS NOT NULL AND next_expiry >= current_date
+             AND next_expiry <= current_date + ($7 * interval '1 day')))
+     ORDER BY ${renewingDays > 0 ? "next_expiry ASC" : `${col} DESC, distinct_funders DESC`}
      LIMIT 200`,
-    [minFilings, name, funder, minFunders, state, city],
+    [minFilings, name, funder, minFunders, state, city, renewingDays],
   );
 }
 
@@ -151,7 +155,7 @@ export type IndividualRow = {
   person_key: string; person_name: string; city: string; state: string;
   ucc_count: number; ucc_6mo: number; ucc_12mo: number;
   last_filing: string; distinct_funders: number;
-  active_liens: number; tax_liens: number;
+  active_liens: number; tax_liens: number; next_expiry: string | null;
 };
 
 // Unified individual search: people who are UCC debtors/guarantors, by name +
@@ -159,25 +163,29 @@ export type IndividualRow = {
 // Used by UCC Search (name-led lookup) and Lead Gen (filter-led discovery, no name).
 export function searchIndividuals(opts: {
   name?: string; minFilings?: number; minFunders?: number;
-  window?: SearchWindow; state?: string; city?: string;
+  window?: SearchWindow; state?: string; city?: string; renewingDays?: number;
 }) {
   const name = (opts.name ?? "").trim();
   const state = (opts.state ?? "").trim();
   const city = (opts.city ?? "").trim();
   const minFilings = Math.max(1, Number(opts.minFilings) || 1);
   const minFunders = Math.max(0, Number(opts.minFunders) || 0);
+  const renewingDays = Math.max(0, Number(opts.renewingDays) || 0);
   const col = WINDOW_COL[opts.window ?? "all"] ?? "ucc_count";
   return q<IndividualRow>(
     `SELECT person_key, person_name, city, state, ucc_count, ucc_6mo, ucc_12mo,
-            last_filing::text AS last_filing, distinct_funders, active_liens, tax_liens
+            last_filing::text AS last_filing, distinct_funders, active_liens, tax_liens,
+            next_expiry::text AS next_expiry
      FROM prof_individual
      WHERE ${col} >= $1 AND distinct_funders >= $3
        AND ($2 = '' OR person_name ILIKE '%' || $2 || '%')
        AND ($4 = '' OR upper(state) = upper($4))
        AND ($5 = '' OR city ILIKE '%' || $5 || '%')
-     ORDER BY ${col} DESC, distinct_funders DESC
+       AND ($6 = 0 OR (next_expiry IS NOT NULL AND next_expiry >= current_date
+             AND next_expiry <= current_date + ($6 * interval '1 day')))
+     ORDER BY ${renewingDays > 0 ? "next_expiry ASC" : `${col} DESC, distinct_funders DESC`}
      LIMIT 200`,
-    [minFilings, name, minFunders, state, city],
+    [minFilings, name, minFunders, state, city, renewingDays],
   );
 }
 
