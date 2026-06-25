@@ -41,13 +41,14 @@ function colsFor(kind: Kind): Col[] {
   ];
 }
 
-const PAGE_SIZE = 50;
+const PAGE_SIZES = [60, 120, 240, 480];
 
 export function SortableTable({ kind, rows, empty }: { kind: Kind; rows: Row[]; empty?: string }) {
   const cols = useMemo(() => colsFor(kind), [kind]);
   const [sortIdx, setSortIdx] = useState<number | null>(null);
   const [dir, setDir] = useState<"asc" | "desc">("asc");
   const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(PAGE_SIZES[0]);
 
   const sorted = useMemo(() => {
     if (sortIdx === null) return rows;
@@ -64,9 +65,9 @@ export function SortableTable({ kind, rows, empty }: { kind: Kind; rows: Row[]; 
     });
   }, [rows, sortIdx, dir, cols]);
 
-  const pageCount = Math.ceil(sorted.length / PAGE_SIZE);
+  const pageCount = Math.ceil(sorted.length / pageSize);
   const safePage = Math.min(page, Math.max(0, pageCount - 1));
-  const pageRows = sorted.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
+  const pageRows = sorted.slice(safePage * pageSize, safePage * pageSize + pageSize);
 
   function click(i: number) {
     if (sortIdx === i) setDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -106,16 +107,27 @@ export function SortableTable({ kind, rows, empty }: { kind: Kind; rows: Row[]; 
         </table>
       </div>
 
-      {pageCount > 1 && (
-        <div className="flex items-center justify-between border-t border-slate-100 px-4 py-3 text-xs text-slate-500">
-          <span>Showing {safePage * PAGE_SIZE + 1}–{Math.min(sorted.length, (safePage + 1) * PAGE_SIZE)} of {sorted.length.toLocaleString()}</span>
+      {sorted.length > PAGE_SIZES[0] && (
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 px-4 py-3 text-xs text-slate-500">
           <div className="flex items-center gap-2">
-            <button type="button" onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={safePage === 0}
-              className="rounded-lg border border-slate-200 px-3 py-1 font-medium text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40">Prev</button>
-            <span>Page {safePage + 1} of {pageCount}</span>
-            <button type="button" onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))} disabled={safePage >= pageCount - 1}
-              className="rounded-lg border border-slate-200 px-3 py-1 font-medium text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40">Next</button>
+            <label className="flex items-center gap-1.5">
+              Per page:
+              <select value={pageSize} onChange={(e) => { setPageSize(Number(e.target.value)); setPage(0); }}
+                className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700 outline-none focus:border-indigo-400">
+                {PAGE_SIZES.map((n) => <option key={n} value={n}>{n}</option>)}
+              </select>
+            </label>
+            <span className="text-slate-400">Showing {safePage * pageSize + 1}–{Math.min(sorted.length, (safePage + 1) * pageSize)} of {sorted.length.toLocaleString()}</span>
           </div>
+          {pageCount > 1 && (
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={safePage === 0}
+                className="rounded-lg border border-slate-200 px-3 py-1 font-medium text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40">Prev</button>
+              <span>Page {safePage + 1} of {pageCount}</span>
+              <button type="button" onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))} disabled={safePage >= pageCount - 1}
+                className="rounded-lg border border-slate-200 px-3 py-1 font-medium text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40">Next</button>
+            </div>
+          )}
         </div>
       )}
     </div>
