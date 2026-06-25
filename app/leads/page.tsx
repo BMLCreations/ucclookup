@@ -1,12 +1,12 @@
 import Link from "next/link";
-import { DataTable, UpgradeWall, LoginGate } from "../components";
+import { UpgradeWall, LoginGate } from "../components";
+import { SortableTable } from "../sortable-table";
 import { getSessionUser } from "@/lib/auth";
 import { consumeSearch, FREE_WEEKLY_SEARCHES, FREE_LEADGEN_ROWS } from "@/lib/usage";
 import {
   searchBusinesses, searchIndividuals,
   type BusinessRow, type IndividualRow, type SearchWindow,
 } from "@/lib/features";
-import { bizCols, indCols } from "../result-columns";
 
 export const dynamic = "force-dynamic";
 
@@ -140,8 +140,8 @@ export default async function LeadGen({ searchParams }: { searchParams: Promise<
                 {city && <> · <span className="text-indigo-700">{city}</span></>}
               </h2>
               {type === "businesses"
-                ? <DataTable<BusinessRow> rows={shownBiz} empty="No businesses match these filters." columns={bizCols} />
-                : <DataTable<IndividualRow> rows={shownInds} empty="No individuals match these filters." columns={indCols} />}
+                ? <SortableTable kind="business" rows={shownBiz} empty="No businesses match these filters." />
+                : <SortableTable kind="individual" rows={shownInds} empty="No individuals match these filters." />}
               {hidden > 0 && (
                 <div className="mt-3"><UpgradeWall title={`${hidden} more results are locked`} message={`Free shows the first ${FREE_LEADGEN_ROWS}. Upgrade to Pro to see all ${total} and export them.`} /></div>
               )}

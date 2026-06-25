@@ -1,12 +1,12 @@
 import Link from "next/link";
-import { DataTable, UpgradeWall, LoginGate } from "../components";
+import { UpgradeWall, LoginGate } from "../components";
+import { SortableTable } from "../sortable-table";
 import { getSessionUser } from "@/lib/auth";
 import { consumeSearch, FREE_WEEKLY_SEARCHES, FREE_LEADGEN_ROWS } from "@/lib/usage";
 import {
   searchBusinesses, searchIndividuals, searchFunders,
   type BusinessRow, type IndividualRow, type FunderSearchRow,
 } from "@/lib/features";
-import { bizCols, indCols, funderCols } from "../result-columns";
 
 export const dynamic = "force-dynamic";
 
@@ -91,9 +91,9 @@ export default async function UccSearch({ searchParams }: { searchParams: Promis
             <>
               {!pro && <div className="mb-3 text-xs text-slate-400">Free plan · {used} of {FREE_WEEKLY_SEARCHES} searches used this week</div>}
               <h2 className="mb-3 text-sm font-semibold text-slate-700">{total} {type}{q && <> matching &ldquo;{q}&rdquo;</>}</h2>
-              {type === "businesses" && <DataTable<BusinessRow> rows={shownBiz} empty="No businesses match." columns={bizCols} />}
-              {type === "individuals" && <DataTable<IndividualRow> rows={shownInds} empty="No individuals match." columns={indCols} />}
-              {type === "funders" && <DataTable<FunderSearchRow> rows={shownFunders} empty="No funders match." columns={funderCols} />}
+              {type === "businesses" && <SortableTable kind="business" rows={shownBiz} empty="No businesses match." />}
+              {type === "individuals" && <SortableTable kind="individual" rows={shownInds} empty="No individuals match." />}
+              {type === "funders" && <SortableTable kind="funder" rows={shownFunders} empty="No funders match." />}
               {hidden > 0 && (
                 <div className="mt-3"><UpgradeWall title={`${hidden} more locked`} message={`Free shows the first ${FREE_LEADGEN_ROWS}. Upgrade to Pro to see all ${total}.`} /></div>
               )}
