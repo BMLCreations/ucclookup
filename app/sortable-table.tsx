@@ -41,10 +41,13 @@ function colsFor(kind: Kind): Col[] {
   ];
 }
 
+const PAGE_SIZE = 50;
+
 export function SortableTable({ kind, rows, empty }: { kind: Kind; rows: Row[]; empty?: string }) {
   const cols = useMemo(() => colsFor(kind), [kind]);
   const [sortIdx, setSortIdx] = useState<number | null>(null);
   const [dir, setDir] = useState<"asc" | "desc">("asc");
+  const [page, setPage] = useState(0);
 
   const sorted = useMemo(() => {
     if (sortIdx === null) return rows;
@@ -61,9 +64,14 @@ export function SortableTable({ kind, rows, empty }: { kind: Kind; rows: Row[]; 
     });
   }, [rows, sortIdx, dir, cols]);
 
+  const pageCount = Math.ceil(sorted.length / PAGE_SIZE);
+  const safePage = Math.min(page, Math.max(0, pageCount - 1));
+  const pageRows = sorted.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
+
   function click(i: number) {
     if (sortIdx === i) setDir((d) => (d === "asc" ? "desc" : "asc"));
     else { setSortIdx(i); setDir(cols[i].defaultDir); }
+    setPage(0);
   }
 
   if (!rows.length) {
@@ -87,7 +95,7 @@ export function SortableTable({ kind, rows, empty }: { kind: Kind; rows: Row[]; 
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {sorted.map((row, ri) => (
+            {pageRows.map((row, ri) => (
               <tr key={ri} className="transition-colors hover:bg-indigo-50/40">
                 {cols.map((c) => (
                   <td key={c.label} className={`px-4 py-3 align-top text-slate-700 ${c.center ? "text-center nums" : ""}`}>{c.render(row)}</td>
@@ -97,6 +105,19 @@ export function SortableTable({ kind, rows, empty }: { kind: Kind; rows: Row[]; 
           </tbody>
         </table>
       </div>
+
+      {pageCount > 1 && (
+        <div className="flex items-center justify-between border-t border-slate-100 px-4 py-3 text-xs text-slate-500">
+          <span>Showing {safePage * PAGE_SIZE + 1}–{Math.min(sorted.length, (safePage + 1) * PAGE_SIZE)} of {sorted.length.toLocaleString()}</span>
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={safePage === 0}
+              className="rounded-lg border border-slate-200 px-3 py-1 font-medium text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40">Prev</button>
+            <span>Page {safePage + 1} of {pageCount}</span>
+            <button type="button" onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))} disabled={safePage >= pageCount - 1}
+              className="rounded-lg border border-slate-200 px-3 py-1 font-medium text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40">Next</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

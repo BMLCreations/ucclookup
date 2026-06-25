@@ -4,7 +4,7 @@ import { SortableTable } from "../sortable-table";
 import { getSessionUser } from "@/lib/auth";
 import { consumeSearch, FREE_WEEKLY_SEARCHES, FREE_LEADGEN_ROWS } from "@/lib/usage";
 import {
-  searchBusinesses, searchIndividuals,
+  searchBusinesses, searchIndividuals, countBusinesses, countIndividuals,
   type BusinessRow, type IndividualRow, type SearchWindow,
 } from "@/lib/features";
 
@@ -54,16 +54,16 @@ export default async function LeadGen({ searchParams }: { searchParams: Promise<
 
   const canSearch = !!user && !overQuota && didSearch;
   const F = { minFilings: min, minFunders, window: win, state, city, renewingDays: renew };
-  let biz: BusinessRow[] = [], inds: IndividualRow[] = [];
+  let biz: BusinessRow[] = [], inds: IndividualRow[] = [], total = 0;
   if (canSearch) {
-    if (type === "businesses") biz = await searchBusinesses({ funder: fundedby, ...F });
-    else inds = await searchIndividuals({ ...F });
+    if (type === "businesses") { [biz, total] = await Promise.all([searchBusinesses({ funder: fundedby, ...F }), countBusinesses({ funder: fundedby, ...F })]); }
+    else { [inds, total] = await Promise.all([searchIndividuals({ ...F }), countIndividuals({ ...F })]); }
   }
 
   const cap = <T,>(rows: T[]) => (pro ? rows : rows.slice(0, FREE_LEADGEN_ROWS));
   const shownBiz = cap(biz), shownInds = cap(inds);
-  const total = type === "businesses" ? biz.length : inds.length;
-  const hidden = pro ? 0 : total - (type === "businesses" ? shownBiz.length : shownInds.length);
+  const loaded = type === "businesses" ? shownBiz.length : shownInds.length;
+  const hidden = pro ? 0 : total - loaded;
 
   const winLabel = WINDOWS.find((w) => w.v === win)?.label.toLowerCase();
   const centered = !!user && !didSearch;
@@ -132,7 +132,8 @@ export default async function LeadGen({ searchParams }: { searchParams: Promise<
             <>
               {!pro && <div className="mb-3 text-xs text-slate-400">Free plan · {used} of {FREE_WEEKLY_SEARCHES} searches used this week</div>}
               <h2 className="mb-3 text-sm font-semibold text-slate-700">
-                {total} {type}
+                {total.toLocaleString()} {type}
+                {pro && total > loaded && <span className="font-normal text-slate-400"> (showing top {loaded})</span>}
                 {min > 1 && <> · <span className="text-indigo-700">{min}+</span> filings{win !== "all" && <> in the {winLabel}</>}</>}
                 {minFunders > 0 && <> · <span className="text-indigo-700">{minFunders}+</span> funders</>}
                 {renew > 0 && <> · <span className="text-indigo-700">renewing within {renew} days</span></>}

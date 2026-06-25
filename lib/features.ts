@@ -118,37 +118,46 @@ const WINDOW_COL: Record<SearchWindow, string> = {
 // Unified business search: name (company/debtor) + funder (secured party) +
 // minimum # of UCC filings within a date window + geography. Filters AND together.
 // Used by UCC Search (name-led lookup) and Lead Gen (filter-led discovery, no name/funder).
-export function searchBusinesses(opts: {
+export type BizSearchOpts = {
   name?: string; funder?: string; minFilings?: number; minFunders?: number;
   window?: SearchWindow; state?: string; city?: string; renewingDays?: number;
-}) {
+};
+// Shared filter so search() and count() can never drift apart.
+function bizFilter(opts: BizSearchOpts) {
   const name = (opts.name ?? "").trim();
   const funder = (opts.funder ?? "").trim();
   const state = (opts.state ?? "").trim();
   const city = (opts.city ?? "").trim();
   const minFilings = Math.max(1, Number(opts.minFilings) || 1);
-  const minFunders = Math.max(0, Number(opts.minFunders) || 0); // stacking signal (distinct funders)
-  const renewingDays = Math.max(0, Number(opts.renewingDays) || 0); // renewal radar window
+  const minFunders = Math.max(0, Number(opts.minFunders) || 0);
+  const renewingDays = Math.max(0, Number(opts.renewingDays) || 0);
   const col = WINDOW_COL[opts.window ?? "all"] ?? "ucc_count"; // whitelisted, safe to interpolate
+  const where = `${col} >= $1
+       AND distinct_funders >= $4
+       AND ($2 = '' OR biz_name ILIKE '%' || $2 || '%')
+       AND ($3 = '' OR biz_norm IN (
+             SELECT normalize_name(merchant_name) FROM sum_leads WHERE funder_norm = normalize_name($3)))
+       AND ($5 = '' OR upper(state) = upper($5))
+       AND ($6 = '' OR city ILIKE '%' || $6 || '%')
+       AND ($7 = 0 OR (next_expiry IS NOT NULL AND next_expiry >= current_date
+             AND next_expiry <= current_date + ($7 * interval '1 day')))`;
+  const order = renewingDays > 0 ? "next_expiry ASC" : `${col} DESC, distinct_funders DESC`;
+  return { where, order, params: [minFilings, name, funder, minFunders, state, city, renewingDays] };
+}
+
+export function searchBusinesses(opts: BizSearchOpts) {
+  const { where, order, params } = bizFilter(opts);
   return q<BusinessRow>(
     `SELECT biz_norm, biz_name, city, state, ucc_count, ucc_6mo, ucc_12mo,
             last_filing::text AS last_filing, distinct_funders, active_liens, tax_liens,
             next_expiry::text AS next_expiry
-     FROM prof_business
-     WHERE ${col} >= $1
-       AND distinct_funders >= $4
-       AND ($2 = '' OR biz_name ILIKE '%' || $2 || '%')
-       AND ($3 = '' OR biz_norm IN (
-             SELECT normalize_name(merchant_name) FROM sum_leads
-             WHERE funder_norm = normalize_name($3)))
-       AND ($5 = '' OR upper(state) = upper($5))
-       AND ($6 = '' OR city ILIKE '%' || $6 || '%')
-       AND ($7 = 0 OR (next_expiry IS NOT NULL AND next_expiry >= current_date
-             AND next_expiry <= current_date + ($7 * interval '1 day')))
-     ORDER BY ${renewingDays > 0 ? "next_expiry ASC" : `${col} DESC, distinct_funders DESC`}
-     LIMIT 200`,
-    [minFilings, name, funder, minFunders, state, city, renewingDays],
+     FROM prof_business WHERE ${where} ORDER BY ${order} LIMIT 500`,
+    params,
   );
+}
+export function countBusinesses(opts: BizSearchOpts): Promise<number> {
+  const { where, params } = bizFilter(opts);
+  return q<{ n: number }>(`SELECT count(*)::int n FROM prof_business WHERE ${where}`, params).then((r) => r[0]?.n ?? 0);
 }
 
 export type IndividualRow = {
@@ -161,10 +170,11 @@ export type IndividualRow = {
 // Unified individual search: people who are UCC debtors/guarantors, by name +
 // minimum # of their OWN UCC filings within a date window + geography. Filters AND.
 // Used by UCC Search (name-led lookup) and Lead Gen (filter-led discovery, no name).
-export function searchIndividuals(opts: {
+export type IndSearchOpts = {
   name?: string; minFilings?: number; minFunders?: number;
   window?: SearchWindow; state?: string; city?: string; renewingDays?: number;
-}) {
+};
+function indFilter(opts: IndSearchOpts) {
   const name = (opts.name ?? "").trim();
   const state = (opts.state ?? "").trim();
   const city = (opts.city ?? "").trim();
@@ -172,21 +182,29 @@ export function searchIndividuals(opts: {
   const minFunders = Math.max(0, Number(opts.minFunders) || 0);
   const renewingDays = Math.max(0, Number(opts.renewingDays) || 0);
   const col = WINDOW_COL[opts.window ?? "all"] ?? "ucc_count";
-  return q<IndividualRow>(
-    `SELECT person_key, person_name, city, state, ucc_count, ucc_6mo, ucc_12mo,
-            last_filing::text AS last_filing, distinct_funders, active_liens, tax_liens,
-            next_expiry::text AS next_expiry
-     FROM prof_individual
-     WHERE ${col} >= $1 AND distinct_funders >= $3
+  const where = `${col} >= $1 AND distinct_funders >= $3
        AND ($2 = '' OR person_name ILIKE '%' || $2 || '%')
        AND ($4 = '' OR upper(state) = upper($4))
        AND ($5 = '' OR city ILIKE '%' || $5 || '%')
        AND ($6 = 0 OR (next_expiry IS NOT NULL AND next_expiry >= current_date
-             AND next_expiry <= current_date + ($6 * interval '1 day')))
-     ORDER BY ${renewingDays > 0 ? "next_expiry ASC" : `${col} DESC, distinct_funders DESC`}
-     LIMIT 200`,
-    [minFilings, name, minFunders, state, city, renewingDays],
+             AND next_expiry <= current_date + ($6 * interval '1 day')))`;
+  const order = renewingDays > 0 ? "next_expiry ASC" : `${col} DESC, distinct_funders DESC`;
+  return { where, order, params: [minFilings, name, minFunders, state, city, renewingDays] };
+}
+
+export function searchIndividuals(opts: IndSearchOpts) {
+  const { where, order, params } = indFilter(opts);
+  return q<IndividualRow>(
+    `SELECT person_key, person_name, city, state, ucc_count, ucc_6mo, ucc_12mo,
+            last_filing::text AS last_filing, distinct_funders, active_liens, tax_liens,
+            next_expiry::text AS next_expiry
+     FROM prof_individual WHERE ${where} ORDER BY ${order} LIMIT 500`,
+    params,
   );
+}
+export function countIndividuals(opts: IndSearchOpts): Promise<number> {
+  const { where, params } = indFilter(opts);
+  return q<{ n: number }>(`SELECT count(*)::int n FROM prof_individual WHERE ${where}`, params).then((r) => r[0]?.n ?? 0);
 }
 
 // ── Company profile (Phase 3) ──────────────────────────────────────────────

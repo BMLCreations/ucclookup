@@ -4,7 +4,7 @@ import { SortableTable } from "../sortable-table";
 import { getSessionUser } from "@/lib/auth";
 import { consumeSearch, FREE_WEEKLY_SEARCHES, FREE_LEADGEN_ROWS } from "@/lib/usage";
 import {
-  searchBusinesses, searchIndividuals, searchFunders,
+  searchBusinesses, searchIndividuals, searchFunders, countBusinesses, countIndividuals,
   type BusinessRow, type IndividualRow, type FunderSearchRow,
 } from "@/lib/features";
 
@@ -33,18 +33,17 @@ export default async function UccSearch({ searchParams }: { searchParams: Promis
   }
 
   const canSearch = !!user && !overQuota && didSearch;
-  let biz: BusinessRow[] = [], inds: IndividualRow[] = [], funders: FunderSearchRow[] = [];
+  let biz: BusinessRow[] = [], inds: IndividualRow[] = [], funders: FunderSearchRow[] = [], total = 0;
   if (canSearch) {
-    if (type === "businesses") biz = await searchBusinesses({ name: q });
-    else if (type === "individuals") inds = await searchIndividuals({ name: q });
-    else funders = await searchFunders(q);
+    if (type === "businesses") { [biz, total] = await Promise.all([searchBusinesses({ name: q }), countBusinesses({ name: q })]); }
+    else if (type === "individuals") { [inds, total] = await Promise.all([searchIndividuals({ name: q }), countIndividuals({ name: q })]); }
+    else { funders = await searchFunders(q); total = funders.length; }
   }
 
   const cap = <T,>(rows: T[]) => (pro ? rows : rows.slice(0, FREE_LEADGEN_ROWS));
   const shownBiz = cap(biz), shownInds = cap(inds), shownFunders = cap(funders);
-  const total = type === "businesses" ? biz.length : type === "individuals" ? inds.length : funders.length;
-  const shownLen = type === "businesses" ? shownBiz.length : type === "individuals" ? shownInds.length : shownFunders.length;
-  const hidden = pro ? 0 : total - shownLen;
+  const loaded = type === "businesses" ? shownBiz.length : type === "individuals" ? shownInds.length : shownFunders.length;
+  const hidden = pro ? 0 : total - loaded;
 
   const centered = !!user && !didSearch;
   const typeHref = (t: string) => `/search?${new URLSearchParams({ ...(q ? { q } : {}), type: t }).toString()}`;
@@ -90,7 +89,10 @@ export default async function UccSearch({ searchParams }: { searchParams: Promis
           ) : (
             <>
               {!pro && <div className="mb-3 text-xs text-slate-400">Free plan · {used} of {FREE_WEEKLY_SEARCHES} searches used this week</div>}
-              <h2 className="mb-3 text-sm font-semibold text-slate-700">{total} {type}{q && <> matching &ldquo;{q}&rdquo;</>}</h2>
+              <h2 className="mb-3 text-sm font-semibold text-slate-700">
+                {total.toLocaleString()} {type}{q && <> matching &ldquo;{q}&rdquo;</>}
+                {pro && total > loaded && <span className="font-normal text-slate-400"> · showing top {loaded}</span>}
+              </h2>
               {type === "businesses" && <SortableTable kind="business" rows={shownBiz} empty="No businesses match." />}
               {type === "individuals" && <SortableTable kind="individual" rows={shownInds} empty="No individuals match." />}
               {type === "funders" && <SortableTable kind="funder" rows={shownFunders} empty="No funders match." />}
