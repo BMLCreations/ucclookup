@@ -29,9 +29,7 @@ export default async function Home() {
 
   const primary = !user
     ? { href: "/signup", label: "Start free" }
-    : pro
-      ? { href: "/search", label: "Open Lead Generation" }
-      : { href: "/search", label: "Open Lead Generation" };
+    : { href: "/leads", label: "Open Lead Generation" };
   const secondary = !user
     ? { href: "/pricing", label: "See pricing" }
     : pro
@@ -103,7 +101,7 @@ export default async function Home() {
           <p className="mt-1.5 text-sm leading-relaxed text-slate-500">Already have a name? Look up any debtor, owner, or funder and open their full profile — filings, funders, status, and network.</p>
           <span className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-indigo-600">Look someone up →</span>
         </Link>
-        <Link href="/search" className="group rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition hover:-translate-y-0.5 hover:border-indigo-200 hover:shadow-md">
+        <Link href="/leads" className="group rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition hover:-translate-y-0.5 hover:border-indigo-200 hover:shadow-md">
           <div className="text-xs font-semibold uppercase tracking-wider text-slate-400">Product 2</div>
           <div className="mt-1 text-lg font-semibold text-slate-900">Lead Generation</div>
           <p className="mt-1.5 text-sm leading-relaxed text-slate-500">Don&apos;t know who yet? Filter the whole state by activity, stacking, renewal timing, and location to build a ready-to-call list.</p>

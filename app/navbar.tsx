@@ -5,7 +5,8 @@ import { logoutAction } from "@/lib/auth-actions";
 
 const links = [
   { href: "/", label: "Dashboard" },
-  { href: "/search", label: "Search" },
+  { href: "/search", label: "UCC Search" },
+  { href: "/leads", label: "Lead Gen" },
   { href: "/pricing", label: "Pricing" },
 ];
 
