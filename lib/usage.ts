@@ -4,7 +4,7 @@ import "server-only";
 import { q } from "./db";
 
 export const FREE_WEEKLY_SEARCHES = 4;
-export const FREE_LEADGEN_ROWS = 8;
+export const FREE_LEADGEN_ROWS = 25;
 
 // Count one search against this week's quota; returns whether it's still allowed.
 export async function consumeSearch(userId: number): Promise<{ allowed: boolean; used: number; limit: number }> {
