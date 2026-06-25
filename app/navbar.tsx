@@ -5,8 +5,8 @@ import { logoutAction } from "@/lib/auth-actions";
 
 const links = [
   { href: "/", label: "Dashboard" },
-  { href: "/search", label: "UCC Search" },
-  { href: "/leads", label: "Lead Gen" },
+  { href: "/search", label: "Search" },
+  { href: "/pricing", label: "Pricing" },
 ];
 
 export function NavBar({ user }: { user: { email: string; plan: string } | null }) {

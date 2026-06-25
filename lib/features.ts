@@ -408,6 +408,19 @@ export function funderHeadline(funderNorm: string) {
     [funderNorm],
   );
 }
+// Search funders by name (for the unified search's "Funders" type).
+export type FunderSearchRow = { funder: string; funder_norm: string; filings: number };
+export function searchFunders(name: string) {
+  const n = (name ?? "").trim();
+  return q<FunderSearchRow>(
+    `SELECT funder, normalize_name(funder) AS funder_norm, filings
+     FROM sum_funders
+     WHERE ($1 = '' OR funder ILIKE '%' || $1 || '%')
+     ORDER BY filings DESC LIMIT 200`,
+    [n],
+  );
+}
+
 export type FunderMerchant = { merchant: string; biz_norm: string; liens: number; last_filing: string; city: string; state: string };
 export function funderMerchants(funderNorm: string) {
   return q<FunderMerchant>(
