@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { PageHeader, DataTable, TaxBadge, UpgradeWall, LoginGate } from "../components";
+import { DataTable, TaxBadge, UpgradeWall, LoginGate } from "../components";
 import { getSessionUser } from "@/lib/auth";
 import { consumeSearch, FREE_WEEKLY_SEARCHES, FREE_LEADGEN_ROWS } from "@/lib/usage";
 import {
@@ -18,6 +18,11 @@ const WINDOWS: { v: SearchWindow; label: string }[] = [
 const RENEWALS = [
   { v: 0, label: "Any time" }, { v: 30, label: "Next 30 days" },
   { v: 60, label: "Next 60 days" }, { v: 90, label: "Next 90 days" },
+];
+// Only states we currently hold data for; defaults to all.
+const STATES = [
+  { v: "", label: "All states" },
+  { v: "CA", label: "California" },
 ];
 const TYPES = [
   { v: "businesses", label: "Businesses" },
@@ -61,7 +66,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
     used = Q.used;
   }
 
-  const canSearch = !!user && !overQuota;
+  const canSearch = !!user && !overQuota && didSearch;
   const F = pro ? { minFilings: min, minFunders, window: win, state, city, renewingDays: renew } : {};
 
   let biz: BusinessRow[] = [], inds: IndividualRow[] = [], funders: FunderSearchRow[] = [];
@@ -89,67 +94,80 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
 
   return (
     <div>
-      <PageHeader
-        title="Search"
-        subtitle="Find any business, person, or funder by name — or set filters to discover leads by activity, leverage, and location."
-      />
-
-      {/* Type toggle */}
-      <div className="mb-4 flex gap-2">
-        {TYPES.map((t) => (
-          <Link key={t.v} href={withParams({ type: t.v })}
-            className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${type === t.v ? "bg-indigo-600 text-white shadow-sm" : "bg-white text-slate-600 ring-1 ring-inset ring-slate-200 hover:bg-slate-50"}`}>
-            {t.label}
-          </Link>
-        ))}
-      </div>
-
-      <form action="/search" method="get" className="mb-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <input type="hidden" name="type" value={type} />
-        {/* Search bar */}
-        <div className="flex gap-2">
-          <div className="relative flex-1">
-            <svg className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="9" cy="9" r="6" /><path d="m14 14 3 3" strokeLinecap="round" /></svg>
-            <input type="text" name="q" defaultValue={q} placeholder={`Search ${type} by name…`}
-              className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-9 pr-3 text-sm text-slate-900 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100" />
-          </div>
-          <button type="submit" className="rounded-xl bg-indigo-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700">Search</button>
+      <div className="mx-auto max-w-3xl">
+        {/* Centered title */}
+        <div className="mb-6 text-center">
+          <h1 className="text-[28px] font-semibold tracking-tight text-slate-900">Search</h1>
+          <p className="mx-auto mt-2 max-w-xl text-[15px] leading-relaxed text-slate-500">
+            Find any business, person, or funder by name — or set filters to discover leads by activity, leverage, and location.
+          </p>
         </div>
 
-        {/* Filters (Pro) */}
-        {showLeadFilters && (
-          <fieldset disabled={lock} className={lock ? "opacity-60" : ""}>
-            <div className="mt-4 flex flex-wrap items-end gap-3 border-t border-slate-100 pt-4">
-              <Dropdown label="State"><input name="state" defaultValue={state} placeholder="CA" className={inputCls + " w-20"} /></Dropdown>
-              <Dropdown label="City"><input name="city" defaultValue={city} placeholder="Los Angeles" className={inputCls + " w-40"} /></Dropdown>
-              <Dropdown label="Min filings"><input type="number" name="min" min={1} defaultValue={min} className={inputCls + " w-24"} /></Dropdown>
-              <Dropdown label="Within"><select name="win" defaultValue={win} className={inputCls}>{WINDOWS.map((w) => <option key={w.v} value={w.v}>{w.label}</option>)}</select></Dropdown>
-              <Dropdown label="Min funders (stacking)"><input type="number" name="funders" min={0} defaultValue={minFunders} className={inputCls + " w-24"} /></Dropdown>
-              <Dropdown label="Renewing"><select name="renew" defaultValue={String(renew)} className={inputCls}>{RENEWALS.map((r) => <option key={r.v} value={r.v}>{r.label}</option>)}</select></Dropdown>
-              {type === "businesses" && <Dropdown label="Funded by"><input name="fundedby" defaultValue={fundedby} placeholder="e.g. Forward Financing" className={inputCls + " w-44"} /></Dropdown>}
-            </div>
-          </fieldset>
-        )}
-        {showLeadFilters && lock && (
-          <Link href="/pricing" className="mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-indigo-600 hover:underline">
-            🔒 Filters are a Pro feature — upgrade to discover leads by activity, stacking, location &amp; renewals
-          </Link>
-        )}
-      </form>
-
-      {/* Presets (Pro) */}
-      {showLeadFilters && pro && (
-        <div className="mb-8 flex flex-wrap items-center gap-2">
-          <span className="text-xs font-medium text-slate-400">Quick views:</span>
-          {PRESETS.map((p) => (
-            <Link key={p.label} href={withParams(p.q)} className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600 shadow-sm transition hover:border-indigo-300 hover:text-indigo-700">{p.label}</Link>
+        {/* Type toggle */}
+        <div className="mb-4 flex justify-center gap-2">
+          {TYPES.map((t) => (
+            <Link key={t.v} href={withParams({ type: t.v })}
+              className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${type === t.v ? "bg-indigo-600 text-white shadow-sm" : "bg-white text-slate-600 ring-1 ring-inset ring-slate-200 hover:bg-slate-50"}`}>
+              {t.label}
+            </Link>
           ))}
         </div>
-      )}
+
+        <form action="/search" method="get" className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <input type="hidden" name="type" value={type} />
+          {/* Search bar */}
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <svg className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="9" cy="9" r="6" /><path d="m14 14 3 3" strokeLinecap="round" /></svg>
+              <input type="text" name="q" defaultValue={q} placeholder={`Search ${type} by name…`}
+                className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-9 pr-3 text-sm text-slate-900 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100" />
+            </div>
+            <button type="submit" className="rounded-xl bg-indigo-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700">Search</button>
+          </div>
+
+          {/* Filters (Pro) */}
+          {showLeadFilters && (
+            <fieldset disabled={lock} className={lock ? "opacity-60" : ""}>
+              <div className="mt-4 flex flex-wrap items-end justify-center gap-3 border-t border-slate-100 pt-4">
+                <Dropdown label="State"><select name="state" defaultValue={state} className={inputCls}>{STATES.map((s) => <option key={s.v} value={s.v}>{s.label}</option>)}</select></Dropdown>
+                <Dropdown label="City"><input name="city" defaultValue={city} placeholder="Los Angeles" className={inputCls + " w-40"} /></Dropdown>
+                <Dropdown label="Min filings"><input type="number" name="min" min={1} defaultValue={min} className={inputCls + " w-24"} /></Dropdown>
+                <Dropdown label="Min funders (stacking)"><input type="number" name="funders" min={0} defaultValue={minFunders} className={inputCls + " w-24"} /></Dropdown>
+                <Dropdown label="Renewing"><select name="renew" defaultValue={String(renew)} className={inputCls}>{RENEWALS.map((r) => <option key={r.v} value={r.v}>{r.label}</option>)}</select></Dropdown>
+                {type === "businesses" && <Dropdown label="Funded by"><input name="fundedby" defaultValue={fundedby} placeholder="e.g. Forward Financing" className={inputCls + " w-44"} /></Dropdown>}
+                <Dropdown label="Within"><select name="win" defaultValue={win} className={inputCls}>{WINDOWS.map((w) => <option key={w.v} value={w.v}>{w.label}</option>)}</select></Dropdown>
+              </div>
+            </fieldset>
+          )}
+          {showLeadFilters && lock && (
+            <Link href="/pricing" className="mt-3 flex items-center justify-center gap-1.5 text-xs font-medium text-indigo-600 hover:underline">
+              🔒 Filters are a Pro feature — upgrade to discover leads by activity, stacking, location &amp; renewals
+            </Link>
+          )}
+        </form>
+
+        {/* Presets (Pro) */}
+        {showLeadFilters && pro && (
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+            <span className="text-xs font-medium text-slate-400">Quick views:</span>
+            {PRESETS.map((p) => (
+              <Link key={p.label} href={withParams(p.q)} className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600 shadow-sm transition hover:border-indigo-300 hover:text-indigo-700">{p.label}</Link>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* Results */}
+      <div className="mt-10">
       {loggedOut ? (
         <LoginGate />
+      ) : !didSearch ? (
+        <div className="rounded-2xl border border-dashed border-slate-200 bg-white py-16 text-center">
+          <div className="mx-auto grid h-11 w-11 place-items-center rounded-xl bg-slate-100 text-slate-400">
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-5 w-5"><circle cx="9" cy="9" r="6" /><path d="m14 14 3 3" strokeLinecap="round" /></svg>
+          </div>
+          <p className="mt-3 text-sm text-slate-500">Search by name{pro && " or set filters"}, then hit Search to see results.</p>
+        </div>
       ) : overQuota ? (
         <UpgradeWall title={`You've used your ${FREE_WEEKLY_SEARCHES} free searches this week`} message="Upgrade to Pro for unlimited searches and full Lead Generation." />
       ) : (
@@ -174,6 +192,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
           )}
         </>
       )}
+      </div>
     </div>
   );
 }
