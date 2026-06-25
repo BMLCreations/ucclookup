@@ -97,13 +97,15 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
   return (
     <div className={centered ? "pt-16 transition-all sm:pt-28" : "transition-all"}>
       <div className="mx-auto max-w-3xl">
-        {/* Centered title */}
-        <div className="mb-6 text-center">
-          <h1 className="text-[28px] font-semibold tracking-tight text-slate-900">Search</h1>
-          <p className="mx-auto mt-2 max-w-xl text-[15px] leading-relaxed text-slate-500">
-            Find any business, person, or funder by name — or set filters to discover leads by activity, leverage, and location.
-          </p>
-        </div>
+        {/* Title — shown only before a search; the bar moves up to replace it after */}
+        {!didSearch && (
+          <div className="mb-6 text-center">
+            <h1 className="text-[28px] font-semibold tracking-tight text-slate-900">Search</h1>
+            <p className="mx-auto mt-2 max-w-xl text-[15px] leading-relaxed text-slate-500">
+              Find any business, person, or funder by name — or set filters to discover leads by activity, leverage, and location.
+            </p>
+          </div>
+        )}
 
         {/* Type toggle */}
         <div className="mb-4 flex justify-center gap-2">
