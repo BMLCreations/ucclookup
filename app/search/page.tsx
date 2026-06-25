@@ -91,9 +91,11 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
 
   const lock = !pro; // filters disabled for Free
   const showLeadFilters = type !== "funders";
+  // Before any search (logged in), sit the bar lower/centered; after, it moves up.
+  const centered = !!user && !didSearch;
 
   return (
-    <div>
+    <div className={centered ? "pt-16 transition-all sm:pt-28" : "transition-all"}>
       <div className="mx-auto max-w-3xl">
         {/* Centered title */}
         <div className="mb-6 text-center">
@@ -157,17 +159,11 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
         )}
       </div>
 
-      {/* Results */}
+      {/* Results — only after a search (or the logged-out teaser) */}
+      {(loggedOut || didSearch) && (
       <div className="mt-10">
       {loggedOut ? (
         <LoginGate />
-      ) : !didSearch ? (
-        <div className="rounded-2xl border border-dashed border-slate-200 bg-white py-16 text-center">
-          <div className="mx-auto grid h-11 w-11 place-items-center rounded-xl bg-slate-100 text-slate-400">
-            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-5 w-5"><circle cx="9" cy="9" r="6" /><path d="m14 14 3 3" strokeLinecap="round" /></svg>
-          </div>
-          <p className="mt-3 text-sm text-slate-500">Search by name{pro && " or set filters"}, then hit Search to see results.</p>
-        </div>
       ) : overQuota ? (
         <UpgradeWall title={`You've used your ${FREE_WEEKLY_SEARCHES} free searches this week`} message="Upgrade to Pro for unlimited searches and full Lead Generation." />
       ) : (
@@ -193,6 +189,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
         </>
       )}
       </div>
+      )}
     </div>
   );
 }
