@@ -43,6 +43,7 @@ export default async function CompanyProfile({ params }: { params: Promise<{ id:
   const signals: { tone: "up" | "down" | "warn" | "info" | "neutral"; label: string; detail: string }[] = [];
   if (trend) signals.push(trend);
   if (pro && daysToRenewal != null && daysToRenewal >= 0) signals.push({ tone: "info", label: "Next renewal", detail: `${head.next_expiry} · in ${daysToRenewal} day${daysToRenewal === 1 ? "" : "s"}` });
+  if (pro && related.length > 0) signals.push({ tone: "info", label: "Owner network", detail: `runs ${related.length} other compan${related.length === 1 ? "y" : "ies"} with UCC filings` });
   if (pro && liens.length > 0) signals.push({ tone: "warn", label: `${liensLabel} tax lien${liens.length === 1 ? "" : "s"} / judgment${liens.length === 1 ? "" : "s"}`, detail: "financial-distress signal" });
   if (suspended) signals.push({ tone: "warn", label: "Not in good standing", detail: reg!.entity_status });
 
@@ -72,7 +73,7 @@ export default async function CompanyProfile({ params }: { params: Promise<{ id:
         <Stat label="Total UCC filings" value={head.ucc_count.toLocaleString()} />
         <Stat label="Active liens" value={head.active_liens.toLocaleString()} />
         <Stat label="Distinct funders" value={head.distinct_funders.toLocaleString()} />
-        <Stat label="Owner network" value={related.length.toLocaleString()} />
+        <Stat label="Filings · last 6 mo" value={head.ucc_6mo.toLocaleString()} />
         <Stat label="Last filing" value={head.last_filing ?? "—"} />
         <Stat label="Tax liens / judgments" value={liensLabel} tone={liens.length > 0 ? "warn" : "default"} />
       </div>
