@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useState, useMemo } from "react";
+import { fmtDate } from "@/lib/format";
 
 type Kind = "business" | "individual" | "funder";
 type Row = Record<string, unknown>;
@@ -36,8 +37,8 @@ function colsFor(kind: Kind): Col[] {
     { label: "Active", center: true, defaultDir: "desc", val: (r) => Number(r.active_liens), render: (r) => s(r.active_liens) },
     { label: "Funders", center: true, defaultDir: "desc", val: (r) => Number(r.distinct_funders), render: (r) => s(r.distinct_funders) },
     { label: "Tax liens", center: true, defaultDir: "desc", val: (r) => Number(r.tax_liens), render: (r) => taxBadge(Number(r.tax_liens)) },
-    { label: "Renews", defaultDir: "asc", val: (r) => (r.next_expiry ? s(r.next_expiry) : null), render: (r) => (r.next_expiry ? s(r.next_expiry) : "—") },
-    { label: "Last filing", defaultDir: "desc", val: (r) => (r.last_filing ? s(r.last_filing) : null), render: (r) => s(r.last_filing) },
+    { label: "Renews", defaultDir: "asc", val: (r) => (r.next_expiry ? s(r.next_expiry) : null), render: (r) => fmtDate(r.next_expiry as string) },
+    { label: "Last filing", defaultDir: "desc", val: (r) => (r.last_filing ? s(r.last_filing) : null), render: (r) => fmtDate(r.last_filing as string) },
   ];
 }
 

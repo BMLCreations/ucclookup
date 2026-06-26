@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { DataTable, Stat, Collapsible, StatusPill, TaxBadge, EntityStatusBadge, SignalCard, ExpiringSoonBadge, isExpiringSoon, LockedSection } from "../../components";
 import { getSessionUser } from "@/lib/auth";
+import { fmtDate } from "@/lib/format";
 import { BackButton } from "../../back-button";
 import {
   businessHeadline, businessFilings, businessPrincipals, businessLiens, relatedCompanies,
@@ -42,7 +43,7 @@ export default async function CompanyProfile({ params }: { params: Promise<{ id:
   const suspended = !!reg && /suspend|forfeit/i.test(reg.entity_status);
   const signals: { tone: "up" | "down" | "warn" | "info" | "neutral"; label: string; detail: string }[] = [];
   if (trend) signals.push(trend);
-  if (pro && daysToRenewal != null && daysToRenewal >= 0) signals.push({ tone: "info", label: "Next renewal", detail: `${head.next_expiry} · in ${daysToRenewal} day${daysToRenewal === 1 ? "" : "s"}` });
+  if (pro && daysToRenewal != null && daysToRenewal >= 0) signals.push({ tone: "info", label: "Next renewal", detail: `${fmtDate(head.next_expiry)} · in ${daysToRenewal} day${daysToRenewal === 1 ? "" : "s"}` });
   if (pro && related.length > 0) signals.push({ tone: "info", label: "Owner network", detail: `runs ${related.length} other compan${related.length === 1 ? "y" : "ies"} with UCC filings` });
   if (pro && liens.length > 0) signals.push({ tone: "warn", label: `${liensLabel} tax lien${liens.length === 1 ? "" : "s"} / judgment${liens.length === 1 ? "" : "s"}`, detail: "financial-distress signal" });
   if (suspended) signals.push({ tone: "warn", label: "Not in good standing", detail: reg!.entity_status });
@@ -74,7 +75,7 @@ export default async function CompanyProfile({ params }: { params: Promise<{ id:
         <Stat label="Active liens" value={head.active_liens.toLocaleString()} />
         <Stat label="Distinct funders" value={head.distinct_funders.toLocaleString()} />
         <Stat label="Filings · last 6 mo" value={head.ucc_6mo.toLocaleString()} />
-        <Stat label="Last filing" value={head.last_filing ?? "—"} />
+        <Stat label="Last filing" value={fmtDate(head.last_filing)} />
         <Stat label="Tax liens / judgments" value={liensLabel} tone={liens.length > 0 ? "warn" : "default"} />
       </div>
 
@@ -98,7 +99,7 @@ export default async function CompanyProfile({ params }: { params: Promise<{ id:
                   <Link href={`/funder/${encodeURIComponent(r.funder_norm)}`} className="font-medium text-indigo-700 hover:underline">{r.funder}</Link>
                 ) },
               { key: "liens", label: "Liens", className: "text-center nums" },
-              { key: "last_filing", label: "Last filing" },
+              { key: "last_filing", label: "Last filing", render: (r) => fmtDate(r.last_filing) },
             ]}
           />
         </Collapsible>
@@ -107,7 +108,7 @@ export default async function CompanyProfile({ params }: { params: Promise<{ id:
             rows={filings}
             empty="No UCC filings."
             columns={[
-              { key: "filed", label: "Filed" },
+              { key: "filed", label: "Filed", render: (r) => fmtDate(r.filed) },
               { key: "funder", label: "Secured party", render: (r) => (
                   <div>
                     {r.funder
@@ -118,7 +119,7 @@ export default async function CompanyProfile({ params }: { params: Promise<{ id:
                 ) },
               { key: "status", label: "Status", className: "text-center", render: (r) => <StatusPill status={r.status} /> },
               { key: "lapse", label: "Lapse / Expiration date", render: (r) => (
-                  <span>{r.lapse || "—"}{isExpiringSoon(r.status, r.lapse) && <ExpiringSoonBadge />}</span>
+                  <span>{fmtDate(r.lapse)}{isExpiringSoon(r.status, r.lapse) && <ExpiringSoonBadge />}</span>
                 ) },
               { key: "debtor_addr", label: "Debtor address", render: (r) => <span className="text-slate-500">{r.debtor_addr || "—"}</span> },
               { key: "filing_num", label: "Filing #", render: (r) => <span className="text-xs text-slate-400">{r.filing_num}</span> },
@@ -135,7 +136,7 @@ export default async function CompanyProfile({ params }: { params: Promise<{ id:
               rows={liens}
               empty="No tax liens or judgments on record."
               columns={[
-                { key: "filed", label: "Filed" },
+                { key: "filed", label: "Filed", render: (r) => fmtDate(r.filed) },
                 { key: "lien_type", label: "Type", className: "font-medium text-slate-900" },
                 { key: "claimant", label: "Claimant", render: (r) => r.claimant || "—" },
                 { key: "status", label: "Status", className: "text-center", render: (r) => <StatusPill status={r.status} /> },
@@ -199,7 +200,7 @@ function fundingTrend(timeline: { period: string; n: number }[], lastFiling: str
 
   const days = lastFiling ? Math.floor((Date.now() - new Date(lastFiling + "T00:00:00").getTime()) / 86_400_000) : null;
   const recency = days != null ? `last advance ${days} day${days === 1 ? "" : "s"} ago` : "";
-  if (days != null && days > 540) return { tone: "down", label: "Dormant", detail: `no new advances in ${Math.floor(days / 365)}+ years (last ${lastFiling})` };
+  if (days != null && days > 540) return { tone: "down", label: "Dormant", detail: `no new advances in ${Math.floor(days / 365)}+ years (last ${fmtDate(lastFiling)})` };
 
   const yrs = timeline.map((p) => ({ y: Number(p.period), n: p.n }));
   if (yrs.length <= 1) return { tone: "neutral", label: `${total} advances`, detail: `all in ${yrs[0]?.y ?? ""}${recency ? ` · ${recency}` : ""}` };

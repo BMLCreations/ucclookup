@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { DataTable, Stat, Collapsible, StatusPill, NextRenewalCallout, ExpiringSoonBadge, isExpiringSoon, LockedSection } from "../../components";
 import { getSessionUser } from "@/lib/auth";
+import { fmtDate } from "@/lib/format";
 import { BackButton } from "../../back-button";
 import {
   personHeadline, personFilings, personCompanies, personLiens, personCoOwners,
@@ -51,7 +52,7 @@ export default async function PersonProfile({ params }: { params: Promise<{ key:
         <Stat label="Total UCC filings" value={head.ucc_count.toLocaleString()} />
         <Stat label="Distinct funders" value={head.distinct_funders.toLocaleString()} />
         <Stat label="Filings · last 6 mo" value={head.ucc_6mo.toLocaleString()} />
-        <Stat label="Last filing" value={head.last_filing ?? "—"} />
+        <Stat label="Last filing" value={fmtDate(head.last_filing)} />
         <Stat label="Tax liens / judgments" value={liensLabel} tone={liens.length > 0 ? "warn" : "default"} />
       </div>
 
@@ -61,7 +62,7 @@ export default async function PersonProfile({ params }: { params: Promise<{ key:
             rows={filings}
             empty="No UCC filings."
             columns={[
-              { key: "filed", label: "Filed" },
+              { key: "filed", label: "Filed", render: (r) => fmtDate(r.filed) },
               { key: "funder", label: "Secured party", render: (r) => (
                   <div>
                     {r.funder
@@ -72,7 +73,7 @@ export default async function PersonProfile({ params }: { params: Promise<{ key:
                 ) },
               { key: "status", label: "Status", className: "text-center", render: (r) => <StatusPill status={r.status} /> },
               { key: "lapse", label: "Lapse / Expiration date", render: (r) => (
-                  <span>{r.lapse || "—"}{isExpiringSoon(r.status, r.lapse) && <ExpiringSoonBadge />}</span>
+                  <span>{fmtDate(r.lapse)}{isExpiringSoon(r.status, r.lapse) && <ExpiringSoonBadge />}</span>
                 ) },
               { key: "debtor_addr", label: "Debtor address", render: (r) => <span className="text-slate-500">{r.debtor_addr || "—"}</span> },
               { key: "filing_num", label: "Filing #", render: (r) => <span className="text-xs text-slate-400">{r.filing_num}</span> },
@@ -89,7 +90,7 @@ export default async function PersonProfile({ params }: { params: Promise<{ key:
               rows={liens}
               empty="No tax liens or judgments on record."
               columns={[
-                { key: "filed", label: "Filed" },
+                { key: "filed", label: "Filed", render: (r) => fmtDate(r.filed) },
                 { key: "lien_type", label: "Type", className: "font-medium text-slate-900" },
                 { key: "claimant", label: "Claimant", render: (r) => r.claimant || "—" },
                 { key: "status", label: "Status", className: "text-center", render: (r) => <StatusPill status={r.status} /> },

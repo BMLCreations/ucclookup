@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { DataTable, Stat, UpgradeWall } from "../../components";
 import { getSessionUser } from "@/lib/auth";
+import { fmtDate } from "@/lib/format";
 import { BackButton } from "../../back-button";
 import { funderHeadline, funderMerchants, type FunderMerchant } from "@/lib/features";
 
@@ -37,7 +38,7 @@ export default async function FunderProfile({ params }: { params: Promise<{ name
       <div className="my-7 grid grid-cols-2 gap-3 sm:grid-cols-3">
         <Stat label="Total liens filed" value={head.total.toLocaleString()} />
         <Stat label="Merchants funded" value={head.merchants.toLocaleString()} />
-        <Stat label="Last filing" value={head.last_filing ?? "—"} />
+        <Stat label="Last filing" value={fmtDate(head.last_filing)} />
       </div>
 
       <h2 className="mb-3 text-sm font-semibold text-slate-700">
@@ -53,7 +54,7 @@ export default async function FunderProfile({ params }: { params: Promise<{ name
               ) },
             { key: "city", label: "Location", render: (r) => [r.city, r.state].filter(Boolean).join(", ") || "—" },
             { key: "liens", label: "Liens", className: "text-center nums" },
-            { key: "last_filing", label: "Last filing" },
+            { key: "last_filing", label: "Last filing", render: (r) => fmtDate(r.last_filing) },
           ]}
         />
       ) : (

@@ -1,4 +1,5 @@
 // Shared presentational components (server-safe, no client JS needed).
+import { fmtDate } from "@/lib/format";
 
 export function PageHeader({ title, subtitle }: { title: string; subtitle?: string }) {
   return (
@@ -259,7 +260,7 @@ export function NextRenewalCallout({ date }: { date: string | null }) {
         <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" />
       </svg>
       <span className="font-semibold text-amber-700">Next renewal</span>
-      <span className="text-amber-700">{date} · in {days} day{days === 1 ? "" : "s"}</span>
+      <span className="text-amber-700">{fmtDate(date)} · in {days} day{days === 1 ? "" : "s"}</span>
     </div>
   );
 }
