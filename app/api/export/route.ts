@@ -24,6 +24,9 @@ export async function GET(request: Request) {
 
   const sp = new URL(request.url).searchParams;
   const type = sp.get("type") === "individuals" ? "individuals" : "businesses";
+  // Caller may request a specific count; always capped at the remaining monthly allowance.
+  const reqLimit = Math.floor(Number(sp.get("limit")) || 0);
+  const limit = reqLimit > 0 ? Math.min(reqLimit, remaining) : remaining;
   const opts = {
     minFilings: Number(sp.get("min")) || 1,
     minFunders: Number(sp.get("funders")) || 0,
@@ -38,11 +41,11 @@ export async function GET(request: Request) {
   let lines: string[];
 
   if (type === "businesses") {
-    const rows = await exportBusinesses({ ...opts, funder: (sp.get("fundedby") ?? "").trim() }, remaining);
+    const rows = await exportBusinesses({ ...opts, funder: (sp.get("fundedby") ?? "").trim() }, limit);
     lines = rows.map((r) => [r.biz_name, r.city, r.state, r.ucc_count, r.active_liens, r.distinct_funders, r.tax_liens, fmtDate(r.next_expiry), fmtDate(r.last_filing)].map(f).join(","));
     await addExport(user.id, rows.length);
   } else {
-    const rows = await exportIndividuals(opts, remaining);
+    const rows = await exportIndividuals(opts, limit);
     lines = rows.map((r) => [r.person_name, r.city, r.state, r.ucc_count, r.active_liens, r.distinct_funders, r.tax_liens, fmtDate(r.next_expiry), fmtDate(r.last_filing)].map(f).join(","));
     await addExport(user.id, rows.length);
   }

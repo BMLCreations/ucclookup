@@ -151,7 +151,7 @@ export function searchBusinesses(opts: BizSearchOpts) {
     `SELECT biz_norm, biz_name, city, state, ucc_count, ucc_6mo, ucc_12mo,
             last_filing::text AS last_filing, distinct_funders, active_liens, tax_liens,
             next_expiry::text AS next_expiry
-     FROM prof_business WHERE ${where} ORDER BY ${order} LIMIT 500`,
+     FROM prof_business WHERE ${where} ORDER BY ${order} LIMIT 1000`,
     params,
   );
 }
@@ -208,7 +208,7 @@ export function searchIndividuals(opts: IndSearchOpts) {
     `SELECT person_key, person_name, city, state, ucc_count, ucc_6mo, ucc_12mo,
             last_filing::text AS last_filing, distinct_funders, active_liens, tax_liens,
             next_expiry::text AS next_expiry
-     FROM prof_individual WHERE ${where} ORDER BY ${order} LIMIT 500`,
+     FROM prof_individual WHERE ${where} ORDER BY ${order} LIMIT 1000`,
     params,
   );
 }

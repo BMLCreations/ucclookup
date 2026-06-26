@@ -78,6 +78,7 @@ export default async function LeadGen({ searchParams }: { searchParams: Promise<
   if (renew > 0) ep.set("renew", String(renew));
   if (fundedby) ep.set("fundedby", fundedby);
   const exportHref = `/api/export?${ep.toString()}`;
+  const exportCounts = [500, 1000, 2500, 5000].filter((n) => n < total);
 
   function withParams(over: Record<string, string>) {
     const p = new URLSearchParams();
@@ -153,9 +154,17 @@ export default async function LeadGen({ searchParams }: { searchParams: Promise<
                   {city && <> · <span className="text-indigo-700">{city}</span></>}
                 </h2>
                 {total > 0 && (pro ? (
-                  <a href={exportHref} className="shrink-0 rounded-xl border border-slate-300 px-4 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50">
-                    ⤓ Export CSV
-                  </a>
+                  <details className="relative shrink-0">
+                    <summary className="cursor-pointer list-none rounded-xl border border-slate-300 px-4 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 [&::-webkit-details-marker]:hidden">
+                      ⤓ Export CSV ▾
+                    </summary>
+                    <div className="absolute right-0 z-10 mt-1 w-60 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 text-xs shadow-lg">
+                      {exportCounts.map((n) => (
+                        <a key={n} href={`${exportHref}&limit=${n}`} className="block px-4 py-2 text-slate-600 transition hover:bg-slate-50">Top {n.toLocaleString()}</a>
+                      ))}
+                      <a href={exportHref} className="block px-4 py-2 font-medium text-indigo-600 transition hover:bg-slate-50">All {total.toLocaleString()} <span className="text-slate-400">(up to your monthly limit)</span></a>
+                    </div>
+                  </details>
                 ) : (
                   <Link href="/pricing" className="shrink-0 rounded-xl border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-400 transition hover:border-indigo-300 hover:text-indigo-600">
                     🔒 Export · Pro
