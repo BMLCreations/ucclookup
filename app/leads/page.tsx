@@ -26,7 +26,7 @@ const PRESETS: { label: string; q: Record<string, string> }[] = [
   { label: "Renewing · 90 days", q: { renew: "90" } },
 ];
 
-type SP = { type?: string; g?: string; min?: string; funders?: string; win?: string; state?: string; city?: string; renew?: string; fundedby?: string };
+type SP = { type?: string; g?: string; min?: string; funders?: string; win?: string; state?: string; city?: string; renew?: string; fundedby?: string; filmax?: string; funmax?: string };
 
 export default async function LeadGen({ searchParams }: { searchParams: Promise<SP> }) {
   const user = await getSessionUser();
@@ -42,9 +42,11 @@ export default async function LeadGen({ searchParams }: { searchParams: Promise<
   const city = (sp.city ?? "").trim();
   const renew = [30, 60, 90].includes(Number(sp.renew)) ? Number(sp.renew) : 0;
   const fundedby = (sp.fundedby ?? "").trim();
+  const filmax = Math.max(0, Number(sp.filmax ?? 0) || 0);
+  const funmax = Math.max(0, Number(sp.funmax ?? 0) || 0);
 
   // A "generate" sets g=1; presets carry filters directly.
-  const didSearch = !!sp.g || min > 1 || minFunders > 0 || win !== "all" || !!state || !!city || renew > 0 || !!fundedby;
+  const didSearch = !!sp.g || min > 1 || minFunders > 0 || win !== "all" || !!state || !!city || renew > 0 || !!fundedby || filmax > 0 || funmax > 0;
 
   let overQuota = false, used = 0;
   if (user && !pro && didSearch) {
@@ -53,7 +55,7 @@ export default async function LeadGen({ searchParams }: { searchParams: Promise<
   }
 
   const canSearch = !!user && !overQuota && didSearch;
-  const F = { minFilings: min, minFunders, window: win, state, city, renewingDays: renew };
+  const F = { minFilings: min, minFunders, window: win, state, city, renewingDays: renew, maxFilings: filmax, maxFunders: funmax };
   let biz: BusinessRow[] = [], inds: IndividualRow[] = [], total = 0;
   if (canSearch) {
     if (type === "businesses") { [biz, total] = await Promise.all([searchBusinesses({ funder: fundedby, ...F }), countBusinesses({ funder: fundedby, ...F })]); }
@@ -77,12 +79,14 @@ export default async function LeadGen({ searchParams }: { searchParams: Promise<
   if (city) ep.set("city", city);
   if (renew > 0) ep.set("renew", String(renew));
   if (fundedby) ep.set("fundedby", fundedby);
+  if (filmax > 0) ep.set("filmax", String(filmax));
+  if (funmax > 0) ep.set("funmax", String(funmax));
   const exportHref = `/api/export?${ep.toString()}`;
   const exportCounts = [500, 1000, 2500, 5000].filter((n) => n < total);
 
   function withParams(over: Record<string, string>) {
     const p = new URLSearchParams();
-    const base: Record<string, string> = { type, g: "1", min: String(min), funders: String(minFunders), win, state, city, renew: String(renew), fundedby, ...over };
+    const base: Record<string, string> = { type, g: "1", min: String(min), funders: String(minFunders), win, state, city, renew: String(renew), fundedby, filmax: String(filmax), funmax: String(funmax), ...over };
     for (const [k, v] of Object.entries(base)) if (v && v !== "0" && !(k === "win" && v === "all")) p.set(k, v);
     return `/leads?${p.toString()}`;
   }
@@ -115,8 +119,10 @@ export default async function LeadGen({ searchParams }: { searchParams: Promise<
           <div className="flex flex-wrap items-end justify-center gap-3">
             <Field label="State"><select name="state" defaultValue={state} className={inputCls}>{STATES.map((s) => <option key={s.v} value={s.v}>{s.label}</option>)}</select></Field>
             <Field label="City"><input name="city" defaultValue={city} placeholder="Los Angeles" className={inputCls + " w-40"} /></Field>
-            <Field label="Min filings"><input type="number" name="min" min={1} defaultValue={min} className={inputCls + " w-24"} /></Field>
-            <Field label="Min funders (stacking)"><input type="number" name="funders" min={0} defaultValue={minFunders} className={inputCls + " w-24"} /></Field>
+            <Field label="Min filings"><input type="number" name="min" min={1} defaultValue={min} className={inputCls + " w-20"} /></Field>
+            <Field label="Max filings"><input type="number" name="filmax" min={0} defaultValue={filmax || ""} placeholder="Any" className={inputCls + " w-20"} /></Field>
+            <Field label="Min funders"><input type="number" name="funders" min={0} defaultValue={minFunders} className={inputCls + " w-20"} /></Field>
+            <Field label="Max funders"><input type="number" name="funmax" min={0} defaultValue={funmax || ""} placeholder="Any" className={inputCls + " w-20"} /></Field>
             <Field label="Renewing"><select name="renew" defaultValue={String(renew)} className={inputCls}>{RENEWALS.map((r) => <option key={r.v} value={r.v}>{r.label}</option>)}</select></Field>
             {type === "businesses" && <Field label="Funded by"><input name="fundedby" defaultValue={fundedby} placeholder="e.g. Forward Financing" className={inputCls + " w-44"} /></Field>}
             <Field label="Within"><select name="win" defaultValue={win} className={inputCls}>{WINDOWS.map((w) => <option key={w.v} value={w.v}>{w.label}</option>)}</select></Field>

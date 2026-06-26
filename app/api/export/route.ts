@@ -34,6 +34,8 @@ export async function GET(request: Request) {
     state: (sp.get("state") ?? "").trim(),
     city: (sp.get("city") ?? "").trim(),
     renewingDays: [30, 60, 90].includes(Number(sp.get("renew"))) ? Number(sp.get("renew")) : 0,
+    maxFilings: Math.max(0, Number(sp.get("filmax")) || 0),
+    maxFunders: Math.max(0, Number(sp.get("funmax")) || 0),
   };
 
   const nameHeader = type === "businesses" ? "Business" : "Individual";

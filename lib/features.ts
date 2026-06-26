@@ -121,6 +121,7 @@ const WINDOW_COL: Record<SearchWindow, string> = {
 export type BizSearchOpts = {
   name?: string; funder?: string; minFilings?: number; minFunders?: number;
   window?: SearchWindow; state?: string; city?: string; renewingDays?: number;
+  maxFilings?: number; maxFunders?: number;
 };
 // Shared filter so search() and count() can never drift apart.
 function bizFilter(opts: BizSearchOpts) {
@@ -131,6 +132,8 @@ function bizFilter(opts: BizSearchOpts) {
   const minFilings = Math.max(1, Number(opts.minFilings) || 1);
   const minFunders = Math.max(0, Number(opts.minFunders) || 0);
   const renewingDays = Math.max(0, Number(opts.renewingDays) || 0);
+  const maxFilings = Math.max(0, Number(opts.maxFilings) || 0); // 0 = no max
+  const maxFunders = Math.max(0, Number(opts.maxFunders) || 0); // 0 = no max
   const col = WINDOW_COL[opts.window ?? "all"] ?? "ucc_count"; // whitelisted, safe to interpolate
   const where = `${col} >= $1
        AND distinct_funders >= $4
@@ -140,9 +143,11 @@ function bizFilter(opts: BizSearchOpts) {
        AND ($5 = '' OR upper(state) = upper($5))
        AND ($6 = '' OR city ILIKE '%' || $6 || '%')
        AND ($7 = 0 OR (next_expiry IS NOT NULL AND next_expiry >= current_date
-             AND next_expiry <= current_date + ($7 * interval '1 day')))`;
+             AND next_expiry <= current_date + ($7 * interval '1 day')))
+       AND ($8 = 0 OR ${col} <= $8)
+       AND ($9 = 0 OR distinct_funders <= $9)`;
   const order = renewingDays > 0 ? "next_expiry ASC" : `${col} DESC, distinct_funders DESC`;
-  return { where, order, params: [minFilings, name, funder, minFunders, state, city, renewingDays] };
+  return { where, order, params: [minFilings, name, funder, minFunders, state, city, renewingDays, maxFilings, maxFunders] };
 }
 
 export function searchBusinesses(opts: BizSearchOpts) {
@@ -183,6 +188,7 @@ export type IndividualRow = {
 export type IndSearchOpts = {
   name?: string; minFilings?: number; minFunders?: number;
   window?: SearchWindow; state?: string; city?: string; renewingDays?: number;
+  maxFilings?: number; maxFunders?: number;
 };
 function indFilter(opts: IndSearchOpts) {
   const name = (opts.name ?? "").trim();
@@ -191,15 +197,19 @@ function indFilter(opts: IndSearchOpts) {
   const minFilings = Math.max(1, Number(opts.minFilings) || 1);
   const minFunders = Math.max(0, Number(opts.minFunders) || 0);
   const renewingDays = Math.max(0, Number(opts.renewingDays) || 0);
+  const maxFilings = Math.max(0, Number(opts.maxFilings) || 0);
+  const maxFunders = Math.max(0, Number(opts.maxFunders) || 0);
   const col = WINDOW_COL[opts.window ?? "all"] ?? "ucc_count";
   const where = `${col} >= $1 AND distinct_funders >= $3
        AND ($2 = '' OR person_name ILIKE '%' || $2 || '%')
        AND ($4 = '' OR upper(state) = upper($4))
        AND ($5 = '' OR city ILIKE '%' || $5 || '%')
        AND ($6 = 0 OR (next_expiry IS NOT NULL AND next_expiry >= current_date
-             AND next_expiry <= current_date + ($6 * interval '1 day')))`;
+             AND next_expiry <= current_date + ($6 * interval '1 day')))
+       AND ($7 = 0 OR ${col} <= $7)
+       AND ($8 = 0 OR distinct_funders <= $8)`;
   const order = renewingDays > 0 ? "next_expiry ASC" : `${col} DESC, distinct_funders DESC`;
-  return { where, order, params: [minFilings, name, minFunders, state, city, renewingDays] };
+  return { where, order, params: [minFilings, name, minFunders, state, city, renewingDays, maxFilings, maxFunders] };
 }
 
 export function searchIndividuals(opts: IndSearchOpts) {
