@@ -211,7 +211,8 @@ export function countIndividuals(opts: IndSearchOpts): Promise<number> {
 export function businessHeadline(bizNorm: string) {
   return q<BusinessRow>(
     `SELECT biz_norm, biz_name, city, state, ucc_count, ucc_6mo, ucc_12mo,
-            last_filing::text AS last_filing, distinct_funders, next_expiry::text AS next_expiry
+            last_filing::text AS last_filing, distinct_funders, active_liens, tax_liens,
+            next_expiry::text AS next_expiry
      FROM prof_business WHERE biz_norm = $1 LIMIT 1`,
     [bizNorm],
   );

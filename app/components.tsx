@@ -264,6 +264,23 @@ export function NextRenewalCallout({ date }: { date: string | null }) {
   );
 }
 
+// A compact at-a-glance signal card for the profile signals row.
+export function SignalCard({ tone, label, detail }: { tone: "up" | "down" | "warn" | "info" | "neutral"; label: string; detail: string }) {
+  const bg: Record<string, string> = {
+    up: "border-emerald-200 bg-emerald-50", down: "border-slate-200 bg-slate-50",
+    warn: "border-amber-200 bg-amber-50", info: "border-indigo-200 bg-indigo-50", neutral: "border-slate-200 bg-white",
+  };
+  const fg: Record<string, string> = {
+    up: "text-emerald-700", down: "text-slate-600", warn: "text-amber-700", info: "text-indigo-700", neutral: "text-slate-700",
+  };
+  return (
+    <div className={`rounded-xl border p-3.5 shadow-sm ${bg[tone]}`}>
+      <div className={`text-sm font-semibold ${fg[tone]}`}>{label}</div>
+      <div className="mt-0.5 text-xs leading-relaxed text-slate-500">{detail}</div>
+    </div>
+  );
+}
+
 // CA business-registry status — Active (green), Suspended/Forfeited (red),
 // everything else terminated/inactive/merged (slate).
 export function EntityStatusBadge({ status }: { status: string }) {

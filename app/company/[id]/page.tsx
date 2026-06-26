@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { DataTable, Stat, Collapsible, StatusPill, TaxBadge, EntityStatusBadge, NextRenewalCallout, ExpiringSoonBadge, isExpiringSoon, LockedSection } from "../../components";
+import { DataTable, Stat, Collapsible, StatusPill, TaxBadge, EntityStatusBadge, SignalCard, ExpiringSoonBadge, isExpiringSoon, LockedSection } from "../../components";
 import { getSessionUser } from "@/lib/auth";
 import { BackButton } from "../../back-button";
 import {
@@ -35,7 +35,17 @@ export default async function CompanyProfile({ params }: { params: Promise<{ id:
   const location = [head.city, head.state].filter(Boolean).join(", ");
   const liensLabel = liens.length >= 100 ? "100+" : String(liens.length);
   const reg = registry[0];
-  const maxYear = Math.max(1, ...timeline.map((p) => p.n));
+
+  // At-a-glance signals (replaces the funding-by-year chart).
+  const trend = fundingTrend(timeline, head.last_filing, head.ucc_count);
+  const daysToRenewal = head.next_expiry ? Math.round((new Date(head.next_expiry + "T00:00:00").getTime() - Date.now()) / 86_400_000) : null;
+  const suspended = !!reg && /suspend|forfeit/i.test(reg.entity_status);
+  const signals: { tone: "up" | "down" | "warn" | "info" | "neutral"; label: string; detail: string }[] = [];
+  if (trend) signals.push(trend);
+  if (pro && daysToRenewal != null && daysToRenewal >= 0) signals.push({ tone: "info", label: "Next renewal", detail: `${head.next_expiry} · in ${daysToRenewal} day${daysToRenewal === 1 ? "" : "s"}` });
+  if (pro && related.length > 0) signals.push({ tone: "info", label: "Owner network", detail: `runs ${related.length} other compan${related.length === 1 ? "y" : "ies"} with UCC filings` });
+  if (pro && liens.length > 0) signals.push({ tone: "warn", label: `${liensLabel} tax lien${liens.length === 1 ? "" : "s"} / judgment${liens.length === 1 ? "" : "s"}`, detail: "financial-distress signal" });
+  if (suspended) signals.push({ tone: "warn", label: "Not in good standing", detail: reg!.entity_status });
 
   return (
     <div>
@@ -59,27 +69,19 @@ export default async function CompanyProfile({ params }: { params: Promise<{ id:
         </div>
       )}
 
-      {pro && <NextRenewalCallout date={head.next_expiry} />}
-
-      <div className="my-7 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+      <div className="my-7 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         <Stat label="Total UCC filings" value={head.ucc_count.toLocaleString()} />
+        <Stat label="Active liens" value={head.active_liens.toLocaleString()} />
         <Stat label="Distinct funders" value={head.distinct_funders.toLocaleString()} />
         <Stat label="Filings · last 6 mo" value={head.ucc_6mo.toLocaleString()} />
         <Stat label="Last filing" value={head.last_filing ?? "—"} />
         <Stat label="Tax liens / judgments" value={liensLabel} tone={liens.length > 0 ? "warn" : "default"} />
       </div>
 
-      {timeline.length >= 2 && (
-        <div className="mb-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="mb-3 text-sm font-semibold text-slate-700">Funding activity by year</div>
-          <div className="flex h-24 items-end gap-1.5">
-            {timeline.map((p) => (
-              <div key={p.period} className="flex flex-1 flex-col items-center gap-1" title={`${p.n} filing${p.n === 1 ? "" : "s"} in ${p.period}`}>
-                <div className="w-full rounded-t bg-indigo-500/80" style={{ height: `${Math.max(4, Math.round((p.n / maxYear) * 80))}px` }} />
-                <span className="text-[10px] text-slate-400">{p.period.slice(2)}</span>
-              </div>
-            ))}
-          </div>
+      {/* Signals row — at-a-glance read on the lead */}
+      {signals.length > 0 && (
+        <div className="mb-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {signals.map((sg, i) => <SignalCard key={i} tone={sg.tone} label={sg.label} detail={sg.detail} />)}
         </div>
       )}
 
@@ -186,4 +188,29 @@ export default async function CompanyProfile({ params }: { params: Promise<{ id:
       </div>
     </div>
   );
+}
+
+type Trend = { tone: "up" | "down" | "warn" | "info" | "neutral"; label: string; detail: string };
+// Turn the per-year filing counts + recency into a one-line "is this lead hot?" read.
+function fundingTrend(timeline: { period: string; n: number }[], lastFiling: string | null, total: number): Trend | null {
+  if (!total) return null;
+  const firstYear = timeline.length ? timeline[0].period : null;
+  if (total === 1) return { tone: "neutral", label: "Single advance", detail: `1 advance on record${firstYear ? ` (${firstYear})` : ""}` };
+
+  const days = lastFiling ? Math.floor((Date.now() - new Date(lastFiling + "T00:00:00").getTime()) / 86_400_000) : null;
+  const recency = days != null ? `last advance ${days} day${days === 1 ? "" : "s"} ago` : "";
+  if (days != null && days > 540) return { tone: "down", label: "Dormant", detail: `no new advances in ${Math.floor(days / 365)}+ years (last ${lastFiling})` };
+
+  const yrs = timeline.map((p) => ({ y: Number(p.period), n: p.n }));
+  if (yrs.length <= 1) return { tone: "neutral", label: `${total} advances`, detail: `all in ${yrs[0]?.y ?? ""}${recency ? ` · ${recency}` : ""}` };
+
+  const thisYear = new Date().getFullYear();
+  const recent = yrs.filter((o) => o.y >= thisYear - 1).reduce((s, o) => s + o.n, 0);
+  const earlier = yrs.filter((o) => o.y < thisYear - 1);
+  const earlierAvg = earlier.length ? earlier.reduce((s, o) => s + o.n, 0) / earlier.length : 0;
+  if (recent >= 2 && recent / 2 > earlierAvg * 1.5)
+    return { tone: "up", label: "Accelerating", detail: `${recent} advances in the last 2 years${earlierAvg ? `, up from ~${earlierAvg.toFixed(0)}/yr` : ""}${recency ? ` · ${recency}` : ""}` };
+  if (earlierAvg > 0 && recent / 2 < earlierAvg * 0.5)
+    return { tone: "down", label: "Slowing", detail: `${recent} in the last 2 years, down from ~${earlierAvg.toFixed(0)}/yr${recency ? ` · ${recency}` : ""}` };
+  return { tone: "neutral", label: "Steady", detail: `~${(total / yrs.length).toFixed(0)} advances/yr${recency ? ` · ${recency}` : ""}` };
 }
