@@ -68,6 +68,17 @@ export default async function LeadGen({ searchParams }: { searchParams: Promise<
   const winLabel = WINDOWS.find((w) => w.v === win)?.label.toLowerCase();
   const centered = !!user && !didSearch;
 
+  // CSV export URL — same filters as the search.
+  const ep = new URLSearchParams({ type });
+  if (min > 1) ep.set("min", String(min));
+  if (minFunders > 0) ep.set("funders", String(minFunders));
+  if (win !== "all") ep.set("win", win);
+  if (state) ep.set("state", state);
+  if (city) ep.set("city", city);
+  if (renew > 0) ep.set("renew", String(renew));
+  if (fundedby) ep.set("fundedby", fundedby);
+  const exportHref = `/api/export?${ep.toString()}`;
+
   function withParams(over: Record<string, string>) {
     const p = new URLSearchParams();
     const base: Record<string, string> = { type, g: "1", min: String(min), funders: String(minFunders), win, state, city, renew: String(renew), fundedby, ...over };
@@ -131,15 +142,26 @@ export default async function LeadGen({ searchParams }: { searchParams: Promise<
           ) : (
             <>
               {!pro && <div className="mb-3 text-xs text-slate-400">Free plan · {used} of {FREE_WEEKLY_SEARCHES} searches used this week</div>}
-              <h2 className="mb-3 text-sm font-semibold text-slate-700">
-                {total.toLocaleString()} {type}
-                {pro && total > loaded && <span className="font-normal text-slate-400"> (showing top {loaded})</span>}
-                {min > 1 && <> · <span className="text-indigo-700">{min}+</span> filings{win !== "all" && <> in the {winLabel}</>}</>}
-                {minFunders > 0 && <> · <span className="text-indigo-700">{minFunders}+</span> funders</>}
-                {renew > 0 && <> · <span className="text-indigo-700">renewing within {renew} days</span></>}
-                {state && <> · in <span className="text-indigo-700">{state.toUpperCase()}</span></>}
-                {city && <> · <span className="text-indigo-700">{city}</span></>}
-              </h2>
+              <div className="mb-3 flex items-start justify-between gap-3">
+                <h2 className="text-sm font-semibold text-slate-700">
+                  {total.toLocaleString()} {type}
+                  {pro && total > loaded && <span className="font-normal text-slate-400"> (showing top {loaded})</span>}
+                  {min > 1 && <> · <span className="text-indigo-700">{min}+</span> filings{win !== "all" && <> in the {winLabel}</>}</>}
+                  {minFunders > 0 && <> · <span className="text-indigo-700">{minFunders}+</span> funders</>}
+                  {renew > 0 && <> · <span className="text-indigo-700">renewing within {renew} days</span></>}
+                  {state && <> · in <span className="text-indigo-700">{state.toUpperCase()}</span></>}
+                  {city && <> · <span className="text-indigo-700">{city}</span></>}
+                </h2>
+                {total > 0 && (pro ? (
+                  <a href={exportHref} className="shrink-0 rounded-xl border border-slate-300 px-4 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50">
+                    ⤓ Export CSV
+                  </a>
+                ) : (
+                  <Link href="/pricing" className="shrink-0 rounded-xl border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-400 transition hover:border-indigo-300 hover:text-indigo-600">
+                    🔒 Export · Pro
+                  </Link>
+                ))}
+              </div>
               {type === "businesses"
                 ? <SortableTable kind="business" rows={shownBiz} empty="No businesses match these filters." />
                 : <SortableTable kind="individual" rows={shownInds} empty="No individuals match these filters." />}

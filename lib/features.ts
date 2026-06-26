@@ -159,6 +159,16 @@ export function countBusinesses(opts: BizSearchOpts): Promise<number> {
   const { where, params } = bizFilter(opts);
   return q<{ n: number }>(`SELECT count(*)::int n FROM prof_business WHERE ${where}`, params).then((r) => r[0]?.n ?? 0);
 }
+// Export variant: same filter, caller-supplied row limit (for CSV export).
+export function exportBusinesses(opts: BizSearchOpts, limit: number) {
+  const { where, order, params } = bizFilter(opts);
+  return q<BusinessRow>(
+    `SELECT biz_norm, biz_name, city, state, ucc_count, distinct_funders, active_liens, tax_liens,
+            next_expiry::text AS next_expiry, last_filing::text AS last_filing
+     FROM prof_business WHERE ${where} ORDER BY ${order} LIMIT ${Math.max(0, Math.floor(limit))}`,
+    params,
+  );
+}
 
 export type IndividualRow = {
   person_key: string; person_name: string; city: string; state: string;
@@ -205,6 +215,15 @@ export function searchIndividuals(opts: IndSearchOpts) {
 export function countIndividuals(opts: IndSearchOpts): Promise<number> {
   const { where, params } = indFilter(opts);
   return q<{ n: number }>(`SELECT count(*)::int n FROM prof_individual WHERE ${where}`, params).then((r) => r[0]?.n ?? 0);
+}
+export function exportIndividuals(opts: IndSearchOpts, limit: number) {
+  const { where, order, params } = indFilter(opts);
+  return q<IndividualRow>(
+    `SELECT person_key, person_name, city, state, ucc_count, distinct_funders, active_liens, tax_liens,
+            next_expiry::text AS next_expiry, last_filing::text AS last_filing
+     FROM prof_individual WHERE ${where} ORDER BY ${order} LIMIT ${Math.max(0, Math.floor(limit))}`,
+    params,
+  );
 }
 
 // ── Company profile (Phase 3) ──────────────────────────────────────────────
