@@ -26,7 +26,9 @@ const PRESETS: { label: string; q: Record<string, string> }[] = [
   { label: "Renewing · 90 days", q: { renew: "90" } },
 ];
 
-type SP = { type?: string; g?: string; min?: string; funders?: string; win?: string; state?: string; city?: string; renew?: string; fundedby?: string; filmax?: string; funmax?: string };
+type SP = { type?: string; g?: string; min?: string; funders?: string; win?: string; state?: string; renew?: string; fundedby?: string; filmax?: string; funmax?: string; actmin?: string; actmax?: string; tax?: string };
+
+const TAXMODES = [{ v: 0, label: "Any" }, { v: 1, label: "Has tax liens" }, { v: 2, label: "No tax liens" }];
 
 export default async function LeadGen({ searchParams }: { searchParams: Promise<SP> }) {
   const user = await getSessionUser();
@@ -39,14 +41,16 @@ export default async function LeadGen({ searchParams }: { searchParams: Promise<
   const minFunders = Math.max(0, Number(sp.funders ?? 0) || 0);
   const win = (["all", "3mo", "6mo", "12mo"].includes(sp.win ?? "") ? sp.win : "all") as SearchWindow;
   const state = (sp.state ?? "").trim();
-  const city = (sp.city ?? "").trim();
   const renew = [30, 60, 90].includes(Number(sp.renew)) ? Number(sp.renew) : 0;
   const fundedby = (sp.fundedby ?? "").trim();
   const filmax = Math.max(0, Number(sp.filmax ?? 0) || 0);
   const funmax = Math.max(0, Number(sp.funmax ?? 0) || 0);
+  const actmin = Math.max(0, Number(sp.actmin ?? 0) || 0);
+  const actmax = Math.max(0, Number(sp.actmax ?? 0) || 0);
+  const tax = [1, 2].includes(Number(sp.tax)) ? Number(sp.tax) : 0;
 
   // A "generate" sets g=1; presets carry filters directly.
-  const didSearch = !!sp.g || min > 1 || minFunders > 0 || win !== "all" || !!state || !!city || renew > 0 || !!fundedby || filmax > 0 || funmax > 0;
+  const didSearch = !!sp.g || min > 1 || minFunders > 0 || win !== "all" || !!state || renew > 0 || !!fundedby || filmax > 0 || funmax > 0 || actmin > 0 || actmax > 0 || tax > 0;
 
   let overQuota = false, used = 0;
   if (user && !pro && didSearch) {
@@ -55,7 +59,7 @@ export default async function LeadGen({ searchParams }: { searchParams: Promise<
   }
 
   const canSearch = !!user && !overQuota && didSearch;
-  const F = { minFilings: min, minFunders, window: win, state, city, renewingDays: renew, maxFilings: filmax, maxFunders: funmax };
+  const F = { minFilings: min, minFunders, window: win, state, renewingDays: renew, maxFilings: filmax, maxFunders: funmax, minActive: actmin, maxActive: actmax, taxMode: tax };
   let biz: BusinessRow[] = [], inds: IndividualRow[] = [], total = 0;
   if (canSearch) {
     if (type === "businesses") { [biz, total] = await Promise.all([searchBusinesses({ funder: fundedby, ...F }), countBusinesses({ funder: fundedby, ...F })]); }
@@ -76,17 +80,19 @@ export default async function LeadGen({ searchParams }: { searchParams: Promise<
   if (minFunders > 0) ep.set("funders", String(minFunders));
   if (win !== "all") ep.set("win", win);
   if (state) ep.set("state", state);
-  if (city) ep.set("city", city);
   if (renew > 0) ep.set("renew", String(renew));
   if (fundedby) ep.set("fundedby", fundedby);
   if (filmax > 0) ep.set("filmax", String(filmax));
   if (funmax > 0) ep.set("funmax", String(funmax));
+  if (actmin > 0) ep.set("actmin", String(actmin));
+  if (actmax > 0) ep.set("actmax", String(actmax));
+  if (tax > 0) ep.set("tax", String(tax));
   const exportHref = `/api/export?${ep.toString()}`;
   const exportCounts = [500, 1000, 2500, 5000].filter((n) => n < total);
 
   function withParams(over: Record<string, string>) {
     const p = new URLSearchParams();
-    const base: Record<string, string> = { type, g: "1", min: String(min), funders: String(minFunders), win, state, city, renew: String(renew), fundedby, filmax: String(filmax), funmax: String(funmax), ...over };
+    const base: Record<string, string> = { type, g: "1", min: String(min), funders: String(minFunders), win, state, renew: String(renew), fundedby, filmax: String(filmax), funmax: String(funmax), actmin: String(actmin), actmax: String(actmax), tax: String(tax), ...over };
     for (const [k, v] of Object.entries(base)) if (v && v !== "0" && !(k === "win" && v === "all")) p.set(k, v);
     return `/leads?${p.toString()}`;
   }
@@ -118,11 +124,13 @@ export default async function LeadGen({ searchParams }: { searchParams: Promise<
           <input type="hidden" name="g" value="1" />
           <div className="flex flex-wrap items-end justify-center gap-3">
             <Field label="State"><select name="state" defaultValue={state} className={inputCls}>{STATES.map((s) => <option key={s.v} value={s.v}>{s.label}</option>)}</select></Field>
-            <Field label="City"><input name="city" defaultValue={city} placeholder="Los Angeles" className={inputCls + " w-40"} /></Field>
             <Field label="Min filings"><input type="number" name="min" min={1} defaultValue={min} className={inputCls + " w-20"} /></Field>
             <Field label="Max filings"><input type="number" name="filmax" min={0} defaultValue={filmax || ""} placeholder="Any" className={inputCls + " w-20"} /></Field>
             <Field label="Min funders"><input type="number" name="funders" min={0} defaultValue={minFunders} className={inputCls + " w-20"} /></Field>
             <Field label="Max funders"><input type="number" name="funmax" min={0} defaultValue={funmax || ""} placeholder="Any" className={inputCls + " w-20"} /></Field>
+            <Field label="Min active liens"><input type="number" name="actmin" min={0} defaultValue={actmin || ""} placeholder="Any" className={inputCls + " w-20"} /></Field>
+            <Field label="Max active liens"><input type="number" name="actmax" min={0} defaultValue={actmax || ""} placeholder="Any" className={inputCls + " w-20"} /></Field>
+            <Field label="Tax liens"><select name="tax" defaultValue={String(tax)} className={inputCls}>{TAXMODES.map((t) => <option key={t.v} value={t.v}>{t.label}</option>)}</select></Field>
             <Field label="Renewing"><select name="renew" defaultValue={String(renew)} className={inputCls}>{RENEWALS.map((r) => <option key={r.v} value={r.v}>{r.label}</option>)}</select></Field>
             {type === "businesses" && <Field label="Funded by"><input name="fundedby" defaultValue={fundedby} placeholder="e.g. Forward Financing" className={inputCls + " w-44"} /></Field>}
             <Field label="Within"><select name="win" defaultValue={win} className={inputCls}>{WINDOWS.map((w) => <option key={w.v} value={w.v}>{w.label}</option>)}</select></Field>
@@ -155,9 +163,11 @@ export default async function LeadGen({ searchParams }: { searchParams: Promise<
                   {pro && total > loaded && <span className="font-normal text-slate-400"> (showing top {loaded})</span>}
                   {min > 1 && <> · <span className="text-indigo-700">{min}+</span> filings{win !== "all" && <> in the {winLabel}</>}</>}
                   {minFunders > 0 && <> · <span className="text-indigo-700">{minFunders}+</span> funders</>}
+                  {actmin > 0 && <> · <span className="text-indigo-700">{actmin}+</span> active liens</>}
+                  {tax === 1 && <> · <span className="text-indigo-700">with tax liens</span></>}
+                  {tax === 2 && <> · <span className="text-indigo-700">no tax liens</span></>}
                   {renew > 0 && <> · <span className="text-indigo-700">renewing within {renew} days</span></>}
                   {state && <> · in <span className="text-indigo-700">{state.toUpperCase()}</span></>}
-                  {city && <> · <span className="text-indigo-700">{city}</span></>}
                 </h2>
                 {total > 0 && (pro ? (
                   <details className="relative shrink-0">

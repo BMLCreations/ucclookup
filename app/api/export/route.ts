@@ -32,10 +32,12 @@ export async function GET(request: Request) {
     minFunders: Number(sp.get("funders")) || 0,
     window: (["all", "3mo", "6mo", "12mo"].includes(sp.get("win") ?? "") ? sp.get("win") : "all") as SearchWindow,
     state: (sp.get("state") ?? "").trim(),
-    city: (sp.get("city") ?? "").trim(),
     renewingDays: [30, 60, 90].includes(Number(sp.get("renew"))) ? Number(sp.get("renew")) : 0,
     maxFilings: Math.max(0, Number(sp.get("filmax")) || 0),
     maxFunders: Math.max(0, Number(sp.get("funmax")) || 0),
+    minActive: Math.max(0, Number(sp.get("actmin")) || 0),
+    maxActive: Math.max(0, Number(sp.get("actmax")) || 0),
+    taxMode: [1, 2].includes(Number(sp.get("tax"))) ? Number(sp.get("tax")) : 0,
   };
 
   const nameHeader = type === "businesses" ? "Business" : "Individual";
