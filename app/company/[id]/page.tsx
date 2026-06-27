@@ -58,7 +58,7 @@ export default async function CompanyProfile({ params }: { params: Promise<{ id:
         </span>
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-slate-900">{head.biz_name}</h1>
-          <p className="text-sm text-slate-500">{location || "California"} · Business</p>
+          <p className="text-sm text-slate-500">{location || "—"} · Business</p>
         </div>
       </div>
 

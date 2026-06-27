@@ -31,7 +31,7 @@ export default async function FunderProfile({ params }: { params: Promise<{ name
         </span>
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-slate-900">{head.funder_name}</h1>
-          <p className="text-sm text-slate-500">Secured party / funder · California</p>
+          <p className="text-sm text-slate-500">Secured party / funder</p>
         </div>
       </div>
 

@@ -11,7 +11,7 @@ async function step(name, q) { const s = Date.now(); log("START " + name); try {
 
 const TAX = "f.filing_type_id IN ('Notice of State Tax Lien','Notice of Federal Tax Lien','Judgment Lien') AND f.action_type = 'Lien Financing Stmt'";
 const ACTIVE = "count(DISTINCT d.ucc1_num) FILTER (WHERE NOT le.terminated AND (le.eff_lapse IS NULL OR le.eff_lapse >= now()))";
-const NAMEKEY = `upper(btrim(d.first_name)) || ' ' || upper(btrim(d.last_name)) || '|' ||
+const NAMEKEY = `d.juris || ':' || upper(btrim(d.first_name)) || ' ' || upper(btrim(d.last_name)) || '|' ||
                  coalesce(nullif(upper(btrim(d.city)),''),'') || '|' ||
                  coalesce(nullif(upper(btrim(d.state)),''),'')`;
 
@@ -19,15 +19,16 @@ try {
   await sql.unsafe("SET statement_timeout=0");
   await sql.unsafe("SET work_mem='128MB'");
   await sql.unsafe("SET max_parallel_workers_per_gather=0"); // avoid the /dev/shm exhaustion
+  await sql.unsafe("DROP TABLE IF EXISTS lien_events, ind_active, ind_tax"); // clear leftovers (UNLOGGED, survive reconnects)
 
   await step("temp lien_events", `
-    CREATE TEMP TABLE lien_events AS
+    CREATE UNLOGGED TABLE lien_events AS
       SELECT ucc1_num, bool_or(action_type='Termination') AS terminated, max(lapse_date) AS eff_lapse
       FROM ucc_filings WHERE filing_type_id='UCC' GROUP BY ucc1_num;
     CREATE INDEX ON lien_events (ucc1_num)`);
 
   await step("temp ind_active", `
-    CREATE TEMP TABLE ind_active AS
+    CREATE UNLOGGED TABLE ind_active AS
       SELECT ${NAMEKEY} AS person_key, ${ACTIVE} AS n
       FROM ucc_debtors d
       JOIN ucc_filings f ON f.ucc1_num=d.ucc1_num AND f.ucc3_num=d.ucc3_num
@@ -37,7 +38,7 @@ try {
       GROUP BY 1;
     CREATE INDEX ON ind_active (person_key)`);
   await step("temp ind_tax", `
-    CREATE TEMP TABLE ind_tax AS
+    CREATE UNLOGGED TABLE ind_tax AS
       SELECT ${NAMEKEY} AS person_key, count(DISTINCT f.ucc1_num) AS n
       FROM ucc_debtors d
       JOIN ucc_filings f ON f.ucc1_num=d.ucc1_num AND f.ucc3_num=d.ucc3_num

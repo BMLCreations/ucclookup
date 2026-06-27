@@ -5,6 +5,14 @@
 // (functional normalize_name indexes + pg_trgm trigram indexes for LIKE '%x%').
 import { q } from './db';
 
+// Profile ids are namespaced by jurisdiction: "FL:acme" or "FL:NAME|CITY|STATE".
+// normalize_name() strips ':' from real names, so the prefix is unambiguous.
+// Legacy bare ids (no 2-letter prefix) are treated as California for back-compat.
+function splitJuris(id: string): [string, string] {
+  const m = /^([A-Z]{2}):([\s\S]*)$/.exec(id ?? "");
+  return m ? [m[1], m[2]] : ["CA", id ?? ""];
+}
+
 export type Lead = {
   filed: string; merchant_name: string; funded_by: string;
   city: string; state: string; postal_code: string;
@@ -142,7 +150,7 @@ function bizFilter(opts: BizSearchOpts) {
        AND distinct_funders >= $4
        AND ($2 = '' OR biz_name ILIKE '%' || $2 || '%')
        AND ($3 = '' OR biz_norm IN (
-             SELECT normalize_name(merchant_name) FROM sum_leads WHERE funder_norm = normalize_name($3)))
+             SELECT juris || ':' || normalize_name(merchant_name) FROM sum_leads WHERE funder_norm = normalize_name($3)))
        AND ($5 = '' OR upper(state) = upper($5))
        AND ($6 = '' OR city ILIKE '%' || $6 || '%')
        AND ($7 = 0 OR (next_expiry IS NOT NULL AND next_expiry >= current_date
@@ -263,6 +271,8 @@ export function businessHeadline(bizNorm: string) {
 // registered entities; pick the best (prefer Active, then most recently active).
 export type BizRegistry = { entity_name: string; entity_status: string; entity_type: string; agent: string | null };
 export function businessRegistry(bizNorm: string) {
+  const [juris, bare] = splitJuris(bizNorm);
+  if (juris !== "CA") return Promise.resolve([] as BizRegistry[]); // registry is CA-only until FL Sunbiz (Stage 2)
   return q<BizRegistry>(
     `SELECT e.entity_name, e.entity_status, e.entity_type,
             coalesce(nullif(btrim(a.org_name),''), nullif(btrim(a.first_name||' '||a.last_name),'')) AS agent
@@ -271,7 +281,7 @@ export function businessRegistry(bizNorm: string) {
      WHERE normalize_name(e.entity_name) = $1
      ORDER BY (e.entity_status='Active') DESC, e.last_si_file_date DESC NULLS LAST
      LIMIT 1`,
-    [bizNorm],
+    [bare],
   );
 }
 
@@ -279,6 +289,7 @@ export function businessRegistry(bizNorm: string) {
 // liens each and the most recent. funder_norm lets us link to a funder profile.
 export type FunderBrief = { funder: string; funder_norm: string; liens: number; last_filing: string };
 export function businessFundersList(bizNorm: string) {
+  const [juris, bare] = splitJuris(bizNorm);
   return q<FunderBrief>(
     `SELECT coalesce(sp.org_name,'') AS funder, normalize_name(sp.org_name) AS funder_norm,
             count(DISTINCT f.ucc1_num)::int AS liens, max(f.filing_date)::date::text AS last_filing
@@ -286,23 +297,24 @@ export function businessFundersList(bizNorm: string) {
      JOIN ucc_filings f ON f.ucc1_num = d.ucc1_num AND f.ucc3_num = d.ucc3_num
           AND f.filing_type_id='UCC' AND f.action_type='Lien Financing Stmt'
      JOIN ucc_secured_parties sp ON sp.ucc1_num = f.ucc1_num AND sp.ucc3_num = f.ucc3_num AND sp.org_name <> ''
-     WHERE d.debtor_type='Organization' AND normalize_name(d.org_name) = $1
+     WHERE d.debtor_type='Organization' AND normalize_name(d.org_name) = $1 AND d.juris = $2
      GROUP BY 1, 2 ORDER BY liens DESC, last_filing DESC LIMIT 50`,
-    [bizNorm],
+    [bare, juris],
   );
 }
 
 // Yearly count of a merchant's new UCC liens — drives the funding-activity bars.
 export type TimelinePoint = { period: string; n: number };
 export function businessTimeline(bizNorm: string) {
+  const [juris, bare] = splitJuris(bizNorm);
   return q<TimelinePoint>(
     `SELECT to_char(date_trunc('year', f.filing_date),'YYYY') AS period, count(DISTINCT f.ucc1_num)::int AS n
      FROM ucc_debtors d
      JOIN ucc_filings f ON f.ucc1_num = d.ucc1_num AND f.ucc3_num = d.ucc3_num
           AND f.filing_type_id='UCC' AND f.action_type='Lien Financing Stmt'
-     WHERE d.debtor_type='Organization' AND normalize_name(d.org_name) = $1
+     WHERE d.debtor_type='Organization' AND normalize_name(d.org_name) = $1 AND d.juris = $2
      GROUP BY 1 ORDER BY 1`,
-    [bizNorm],
+    [bare, juris],
   );
 }
 export type BizFiling = {
@@ -327,7 +339,7 @@ function filingSql(where: string): string {
           CASE WHEN nullif(sp.state,'') IS NOT NULL THEN ', ' || sp.state ELSE '' END), ',') AS funder_loc,
         nullif(btrim(coalesce(nullif(d.addr1,''),'') ||
           CASE WHEN nullif(d.city,'') IS NOT NULL THEN ', ' || d.city ELSE '' END), ',') AS debtor_addr,
-        f.ucc1_num AS filing_num,
+        replace(f.ucc1_num, 'FL:', '') AS filing_num,
         CASE WHEN life.terminated THEN 'Terminated'
              WHEN coalesce(life.max_lapse, f.lapse_date) < now() THEN 'Lapsed'
              ELSE 'Active' END AS status,
@@ -349,9 +361,10 @@ function filingSql(where: string): string {
 }
 
 export function businessFilings(bizNorm: string) {
+  const [juris, bare] = splitJuris(bizNorm);
   return q<BizFiling>(
-    filingSql(`d.debtor_type = 'Organization' AND normalize_name(d.org_name) = $1 AND f.filing_type_id = 'UCC'`),
-    [bizNorm],
+    filingSql(`d.debtor_type = 'Organization' AND normalize_name(d.org_name) = $1 AND d.juris = $2 AND f.filing_type_id = 'UCC'`),
+    [bare, juris],
   );
 }
 
@@ -393,7 +406,8 @@ function lienSql(where: string): string {
 }
 
 export function businessLiens(bizNorm: string) {
-  return q<LienRow>(lienSql(`d.debtor_type = 'Organization' AND normalize_name(d.org_name) = $1`), [bizNorm]);
+  const [juris, bare] = splitJuris(bizNorm);
+  return q<LienRow>(lienSql(`d.debtor_type = 'Organization' AND normalize_name(d.org_name) = $1 AND d.juris = $2`), [bare, juris]);
 }
 // ── 1-hop network (Phase 4) ────────────────────────────────────────────────
 // Other UCC-active companies that share an owner with this one (this company ->
@@ -406,6 +420,8 @@ export type RelatedCompany = {
   ucc_count: number; active_liens: number; tax_liens: number;
 };
 export function relatedCompanies(bizNorm: string) {
+  const [juris, bare] = splitJuris(bizNorm);
+  if (juris !== "CA") return Promise.resolve([] as RelatedCompany[]); // owner network is CA-only until FL Sunbiz (Stage 2)
   return q<RelatedCompany>(
     `WITH my_principals AS (
        SELECT DISTINCT upper(btrim(p.first_name))||' '||upper(btrim(p.last_name)) AS pname,
@@ -426,13 +442,13 @@ export function relatedCompanies(bizNorm: string) {
        JOIN be_entities e2 ON e2.entity_num = p2.entity_num
        WHERE normalize_name(e2.entity_name) <> $1
      )
-     SELECT r.biz_norm, max(b.biz_name) AS biz_name,
+     SELECT 'CA:' || r.biz_norm AS biz_norm, max(b.biz_name) AS biz_name,
             string_agg(DISTINCT initcap(lower(r.pname)), ', ') AS via,
             max(b.ucc_count) AS ucc_count, max(b.active_liens) AS active_liens, max(b.tax_liens) AS tax_liens
-     FROM related r JOIN prof_business b ON b.biz_norm = r.biz_norm
+     FROM related r JOIN prof_business b ON b.biz_norm = 'CA:' || r.biz_norm
      GROUP BY r.biz_norm
      ORDER BY max(b.ucc_count) DESC LIMIT 50`,
-    [bizNorm],
+    [bare],
   );
 }
 
@@ -442,17 +458,19 @@ export type BizPrincipal = { name: string; role: string; entity_name: string; pe
 const PRINCIPAL_KEY = `upper(btrim(p.first_name))||' '||upper(btrim(p.last_name))||'|'||
   coalesce(nullif(upper(btrim(p.city)),''),'')||'|'||coalesce(nullif(upper(btrim(p.state)),''),'')`;
 export function businessPrincipals(bizNorm: string) {
+  const [juris, bare] = splitJuris(bizNorm);
+  if (juris !== "CA") return Promise.resolve([] as BizPrincipal[]); // principals are CA-only until FL Sunbiz (Stage 2)
   return q<BizPrincipal>(
     `SELECT DISTINCT initcap(lower(p.first_name || ' ' || p.last_name)) AS name,
             p.position_type AS role, e.entity_name,
-            ${PRINCIPAL_KEY} AS person_key,
+            'CA:' || ${PRINCIPAL_KEY} AS person_key,
             (pi.person_key IS NOT NULL) AS has_profile
      FROM be_entities e
      JOIN be_principals p ON p.entity_num = e.entity_num
-     LEFT JOIN prof_individual pi ON pi.person_key = ${PRINCIPAL_KEY}
+     LEFT JOIN prof_individual pi ON pi.person_key = 'CA:' || ${PRINCIPAL_KEY}
      WHERE normalize_name(e.entity_name) = $1 AND p.last_name <> ''
      ORDER BY e.entity_name, name LIMIT 100`,
-    [bizNorm],
+    [bare],
   );
 }
 
@@ -484,12 +502,12 @@ export function searchFunders(name: string) {
 export type FunderMerchant = { merchant: string; biz_norm: string; liens: number; last_filing: string; city: string; state: string };
 export function funderMerchants(funderNorm: string) {
   return q<FunderMerchant>(
-    `SELECT max(merchant_name) AS merchant, normalize_name(merchant_name) AS biz_norm,
+    `SELECT max(merchant_name) AS merchant, juris || ':' || normalize_name(merchant_name) AS biz_norm,
             count(*)::int AS liens, max(filed)::date::text AS last_filing,
             (array_agg(nullif(city,'') ORDER BY filed DESC) FILTER (WHERE city <> ''))[1] AS city,
             (array_agg(nullif(state,'') ORDER BY filed DESC) FILTER (WHERE state <> ''))[1] AS state
      FROM sum_leads WHERE funder_norm = $1
-     GROUP BY normalize_name(merchant_name)
+     GROUP BY juris, normalize_name(merchant_name)
      ORDER BY liens DESC, last_filing DESC LIMIT 200`,
     [funderNorm],
   );
@@ -515,10 +533,11 @@ const PERSON_MATCH = `
   AND coalesce(nullif(upper(btrim(d.state)),''),'') = $3`;
 
 export function personFilings(personKey: string) {
-  const [nameNorm = "", city = "", state = ""] = personKey.split("|");
+  const [juris, rest] = splitJuris(personKey);
+  const [nameNorm = "", city = "", state = ""] = rest.split("|");
   return q<BizFiling>(
-    filingSql(`d.debtor_type = 'Individual' AND f.filing_type_id = 'UCC' AND ${PERSON_MATCH}`),
-    [nameNorm, city, state],
+    filingSql(`d.debtor_type = 'Individual' AND f.filing_type_id = 'UCC' AND ${PERSON_MATCH} AND d.juris = $4`),
+    [nameNorm, city, state, juris],
   );
 }
 
@@ -527,7 +546,9 @@ export function personFilings(personKey: string) {
 // > 25 companies) excluded; links to a co-owner's person profile when one exists.
 export type CoOwner = { name: string; city: string; state: string; shared: number; person_key: string; has_profile: boolean };
 export function personCoOwners(personKey: string) {
-  const [nameNorm = "", city = ""] = personKey.split("|");
+  const [juris, rest] = splitJuris(personKey);
+  if (juris !== "CA") return Promise.resolve([] as CoOwner[]); // co-owner network is CA-only until FL Sunbiz (Stage 2)
+  const [nameNorm = "", city = ""] = rest.split("|");
   return q<CoOwner>(
     `WITH me AS (
        SELECT DISTINCT p.entity_num FROM be_principals p
@@ -549,20 +570,21 @@ export function personCoOwners(personKey: string) {
               WHERE upper(btrim(bp.first_name))||' '||upper(btrim(bp.last_name)) = co.cname) <= 25
      )
      SELECT initcap(lower(g.cname)) AS name, coalesce(g.ccity,'') AS city, coalesce(g.cstate,'') AS state,
-            g.shared, g.cname||'|'||coalesce(g.ccity,'')||'|'||coalesce(g.cstate,'') AS person_key,
+            g.shared, 'CA:' || g.cname||'|'||coalesce(g.ccity,'')||'|'||coalesce(g.cstate,'') AS person_key,
             (pi.person_key IS NOT NULL) AS has_profile
      FROM guard g
-     LEFT JOIN prof_individual pi ON pi.person_key = g.cname||'|'||coalesce(g.ccity,'')||'|'||coalesce(g.cstate,'')
+     LEFT JOIN prof_individual pi ON pi.person_key = 'CA:' || g.cname||'|'||coalesce(g.ccity,'')||'|'||coalesce(g.cstate,'')
      ORDER BY g.shared DESC, (pi.person_key IS NOT NULL) DESC LIMIT 50`,
     [nameNorm, city],
   );
 }
 
 export function personLiens(personKey: string) {
-  const [nameNorm = "", city = "", state = ""] = personKey.split("|");
+  const [juris, rest] = splitJuris(personKey);
+  const [nameNorm = "", city = "", state = ""] = rest.split("|");
   return q<LienRow>(
-    lienSql(`d.debtor_type = 'Individual' AND ${PERSON_MATCH}`),
-    [nameNorm, city, state],
+    lienSql(`d.debtor_type = 'Individual' AND ${PERSON_MATCH} AND d.juris = $4`),
+    [nameNorm, city, state, juris],
   );
 }
 
@@ -573,9 +595,11 @@ export type PersonCompany = { biz_norm: string; entity_name: string; entity_type
 // profile (which is keyed the same way); it 404s gracefully if that company never
 // appeared as a UCC debtor.
 export function personCompanies(personKey: string) {
-  const [nameNorm = "", city = ""] = personKey.split("|");
+  const [juris, rest] = splitJuris(personKey);
+  if (juris !== "CA") return Promise.resolve([] as PersonCompany[]); // CA registry only until FL Sunbiz (Stage 2)
+  const [nameNorm = "", city = ""] = rest.split("|");
   return q<PersonCompany>(
-    `SELECT DISTINCT normalize_name(e.entity_name) AS biz_norm,
+    `SELECT DISTINCT 'CA:' || normalize_name(e.entity_name) AS biz_norm,
             e.entity_name, e.entity_type, p.position_type AS role,
             coalesce(nullif(p.city,''),'') AS city, coalesce(nullif(p.state,''),'') AS state
      FROM be_principals p

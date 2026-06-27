@@ -42,7 +42,7 @@ export default async function PersonProfile({ params }: { params: Promise<{ key:
         </span>
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-slate-900">{head.person_name}</h1>
-          <p className="text-sm text-slate-500">{location || "California"} · Individual</p>
+          <p className="text-sm text-slate-500">{location || "—"} · Individual</p>
         </div>
       </div>
 

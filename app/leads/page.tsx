@@ -18,7 +18,7 @@ const RENEWALS = [
   { v: 0, label: "Any time" }, { v: 30, label: "Next 30 days" },
   { v: 60, label: "Next 60 days" }, { v: 90, label: "Next 90 days" },
 ];
-const STATES = [{ v: "", label: "All states" }, { v: "CA", label: "California" }];
+const STATES = [{ v: "", label: "All states" }, { v: "CA", label: "California" }, { v: "FL", label: "Florida" }];
 const PRESETS: { label: string; q: Record<string, string> }[] = [
   { label: "Stacked · 3+ funders", q: { funders: "3" } },
   { label: "Heavily stacked · 5+", q: { funders: "5" } },

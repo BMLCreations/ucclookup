@@ -26,11 +26,10 @@ try {
     await step("prof_business", `
       CREATE TABLE prof_business AS
       WITH liens AS (
-        SELECT d.ucc1_num,
-               normalize_name(d.org_name) AS biz_norm,
+        SELECT d.ucc1_num, f.juris,
+               normalize_name(d.org_name) AS biz_norm_bare,
                d.org_name AS biz_name,
                nullif(d.city,'')  AS city,
-               nullif(d.state,'') AS state,
                f.filing_date,
                normalize_name(sp.org_name) AS funder_norm
         FROM ucc_debtors d
@@ -39,10 +38,12 @@ try {
         LEFT JOIN ucc_secured_parties sp ON sp.ucc1_num = d.ucc1_num AND sp.ucc3_num = d.ucc3_num AND sp.org_name <> ''
         WHERE d.debtor_type = 'Organization' AND d.org_name <> '' AND normalize_name(d.org_name) IS NOT NULL
       )
-      SELECT l.biz_norm,
+      -- biz_norm is namespaced by jurisdiction (e.g. 'CA:acme', 'FL:acme') so the
+      -- same name in two states stays two distinct businesses; state column = juris.
+      SELECT l.juris || ':' || l.biz_norm_bare AS biz_norm,
              max(l.biz_name) AS biz_name,
              (array_agg(l.city  ORDER BY l.filing_date DESC NULLS LAST) FILTER (WHERE l.city  IS NOT NULL))[1] AS city,
-             (array_agg(l.state ORDER BY l.filing_date DESC NULLS LAST) FILTER (WHERE l.state IS NOT NULL))[1] AS state,
+             l.juris AS state,
              count(DISTINCT l.ucc1_num)::int AS ucc_count,
              count(DISTINCT l.ucc1_num) FILTER (WHERE l.filing_date > now() - interval '3 months')::int  AS ucc_3mo,
              count(DISTINCT l.ucc1_num) FILTER (WHERE l.filing_date > now() - interval '6 months')::int  AS ucc_6mo,
@@ -50,9 +51,9 @@ try {
              max(l.filing_date)::date AS last_filing,
              count(DISTINCT l.funder_norm) FILTER (WHERE l.funder_norm IS NOT NULL)::int AS distinct_funders
       FROM liens l
-      LEFT JOIN sum_excluded_norm e ON e.nm_norm = l.biz_norm
+      LEFT JOIN sum_excluded_norm e ON e.nm_norm = l.biz_norm_bare
       WHERE e.nm_norm IS NULL
-      GROUP BY l.biz_norm`);
+      GROUP BY l.juris, l.biz_norm_bare`);
     await step("  idx ucc_count",  "CREATE INDEX ON prof_business (ucc_count DESC)");
     await step("  idx ucc_6mo",    "CREATE INDEX ON prof_business (ucc_6mo DESC)");
     await step("  idx ucc_12mo",   "CREATE INDEX ON prof_business (ucc_12mo DESC)");
@@ -71,11 +72,11 @@ try {
     await step("prof_individual", `
       CREATE TABLE prof_individual AS
       WITH liens AS (
-        SELECT d.ucc1_num,
+        SELECT d.ucc1_num, f.juris,
                upper(btrim(d.first_name)) || ' ' || upper(btrim(d.last_name)) AS name_norm,
                initcap(lower(btrim(d.first_name) || ' ' || btrim(d.last_name))) AS person_name,
                nullif(upper(btrim(d.city)),'')  AS city,
-               nullif(upper(btrim(d.state)),'') AS state,
+               nullif(upper(btrim(d.state)),'') AS dstate,
                f.filing_date,
                normalize_name(sp.org_name) AS funder_norm
         FROM ucc_debtors d
@@ -84,16 +85,19 @@ try {
         LEFT JOIN ucc_secured_parties sp ON sp.ucc1_num = d.ucc1_num AND sp.ucc3_num = d.ucc3_num AND sp.org_name<>''
         WHERE d.debtor_type='Individual' AND btrim(d.first_name)<>'' AND btrim(d.last_name)<>''
       )
-      SELECT name_norm || '|' || coalesce(city,'') || '|' || coalesce(state,'') AS person_key,
-             max(person_name) AS person_name, city, state,
-             count(DISTINCT ucc1_num)::int AS ucc_count,
-             count(DISTINCT ucc1_num) FILTER (WHERE filing_date > now()-interval '3 months')::int  AS ucc_3mo,
-             count(DISTINCT ucc1_num) FILTER (WHERE filing_date > now()-interval '6 months')::int  AS ucc_6mo,
-             count(DISTINCT ucc1_num) FILTER (WHERE filing_date > now()-interval '12 months')::int AS ucc_12mo,
-             max(filing_date)::date AS last_filing,
-             count(DISTINCT funder_norm) FILTER (WHERE funder_norm IS NOT NULL)::int AS distinct_funders
-      FROM liens
-      GROUP BY name_norm, city, state`);
+      -- person_key is namespaced by jurisdiction: 'CA:NAME|CITY|STATE'. The state
+      -- slot keeps the debtor's own state (used to match their filings); the state
+      -- column is the jurisdiction (used by the State filter).
+      SELECT l.juris || ':' || l.name_norm || '|' || coalesce(l.city,'') || '|' || coalesce(l.dstate,'') AS person_key,
+             max(l.person_name) AS person_name, l.city AS city, l.juris AS state,
+             count(DISTINCT l.ucc1_num)::int AS ucc_count,
+             count(DISTINCT l.ucc1_num) FILTER (WHERE l.filing_date > now()-interval '3 months')::int  AS ucc_3mo,
+             count(DISTINCT l.ucc1_num) FILTER (WHERE l.filing_date > now()-interval '6 months')::int  AS ucc_6mo,
+             count(DISTINCT l.ucc1_num) FILTER (WHERE l.filing_date > now()-interval '12 months')::int AS ucc_12mo,
+             max(l.filing_date)::date AS last_filing,
+             count(DISTINCT l.funder_norm) FILTER (WHERE l.funder_norm IS NOT NULL)::int AS distinct_funders
+      FROM liens l
+      GROUP BY l.juris, l.name_norm, l.city, l.dstate`);
     await step("  idx ind person_key", "CREATE UNIQUE INDEX ON prof_individual (person_key)");
     await step("  idx ind ucc_count", "CREATE INDEX ON prof_individual (ucc_count DESC)");
     await step("  idx ind ucc_6mo",   "CREATE INDEX ON prof_individual (ucc_6mo DESC)");
