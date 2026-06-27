@@ -119,23 +119,29 @@ export default async function LeadGen({ searchParams }: { searchParams: Promise<
           ))}
         </div>
 
-        <form action="/leads" method="get" className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <form action="/leads" method="get" className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <input type="hidden" name="type" value={type} />
           <input type="hidden" name="g" value="1" />
-          <div className="flex flex-wrap items-end justify-center gap-3">
-            <Field label="State"><select name="state" defaultValue={state} className={inputCls}>{STATES.map((s) => <option key={s.v} value={s.v}>{s.label}</option>)}</select></Field>
-            <Field label="Min filings"><input type="number" name="min" min={1} defaultValue={min} className={inputCls + " w-20"} /></Field>
-            <Field label="Max filings"><input type="number" name="filmax" min={0} defaultValue={filmax || ""} placeholder="Any" className={inputCls + " w-20"} /></Field>
-            <Field label="Min funders"><input type="number" name="funders" min={0} defaultValue={minFunders} className={inputCls + " w-20"} /></Field>
-            <Field label="Max funders"><input type="number" name="funmax" min={0} defaultValue={funmax || ""} placeholder="Any" className={inputCls + " w-20"} /></Field>
-            <Field label="Min active liens"><input type="number" name="actmin" min={0} defaultValue={actmin || ""} placeholder="Any" className={inputCls + " w-20"} /></Field>
-            <Field label="Max active liens"><input type="number" name="actmax" min={0} defaultValue={actmax || ""} placeholder="Any" className={inputCls + " w-20"} /></Field>
-            <Field label="Tax liens"><select name="tax" defaultValue={String(tax)} className={inputCls}>{TAXMODES.map((t) => <option key={t.v} value={t.v}>{t.label}</option>)}</select></Field>
-            <Field label="Renewing"><select name="renew" defaultValue={String(renew)} className={inputCls}>{RENEWALS.map((r) => <option key={r.v} value={r.v}>{r.label}</option>)}</select></Field>
-            {type === "businesses" && <Field label="Funded by"><input name="fundedby" defaultValue={fundedby} placeholder="e.g. Forward Financing" className={inputCls + " w-44"} /></Field>}
-            <Field label="Within"><select name="win" defaultValue={win} className={inputCls}>{WINDOWS.map((w) => <option key={w.v} value={w.v}>{w.label}</option>)}</select></Field>
+          <div className="divide-y divide-slate-100 text-left">
+            <Section title="Activity & leverage">
+              <Field label="Min filings"><input type="number" name="min" min={1} defaultValue={min} className={inputCls + " w-20"} /></Field>
+              <Field label="Max filings"><input type="number" name="filmax" min={0} defaultValue={filmax || ""} placeholder="Any" className={inputCls + " w-20"} /></Field>
+              <Field label="Activity window"><select name="win" defaultValue={win} className={inputCls}>{WINDOWS.map((w) => <option key={w.v} value={w.v}>{w.label}</option>)}</select></Field>
+              <Field label="Min funders"><input type="number" name="funders" min={0} defaultValue={minFunders} className={inputCls + " w-20"} /></Field>
+              <Field label="Max funders"><input type="number" name="funmax" min={0} defaultValue={funmax || ""} placeholder="Any" className={inputCls + " w-20"} /></Field>
+              <Field label="Min active liens"><input type="number" name="actmin" min={0} defaultValue={actmin || ""} placeholder="Any" className={inputCls + " w-20"} /></Field>
+              <Field label="Max active liens"><input type="number" name="actmax" min={0} defaultValue={actmax || ""} placeholder="Any" className={inputCls + " w-20"} /></Field>
+            </Section>
+            <Section title="Risk & timing">
+              <Field label="Tax liens"><select name="tax" defaultValue={String(tax)} className={inputCls}>{TAXMODES.map((t) => <option key={t.v} value={t.v}>{t.label}</option>)}</select></Field>
+              <Field label="Renewing"><select name="renew" defaultValue={String(renew)} className={inputCls}>{RENEWALS.map((r) => <option key={r.v} value={r.v}>{r.label}</option>)}</select></Field>
+            </Section>
+            <Section title="Funder & location">
+              <Field label="State"><select name="state" defaultValue={state} className={inputCls}>{STATES.map((s) => <option key={s.v} value={s.v}>{s.label}</option>)}</select></Field>
+              {type === "businesses" && <Field label="Funded by"><input name="fundedby" defaultValue={fundedby} placeholder="e.g. Forward Financing" className={inputCls + " w-44"} /></Field>}
+            </Section>
           </div>
-          <div className="mt-4 flex justify-center">
+          <div className="mt-6 flex justify-center">
             <button type="submit" className="rounded-xl bg-indigo-600 px-8 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700">Generate leads</button>
           </div>
         </form>
@@ -202,6 +208,14 @@ export default async function LeadGen({ searchParams }: { searchParams: Promise<
 }
 
 const inputCls = "rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm shadow-sm outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100";
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="py-5 first:pt-0 last:pb-0">
+      <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400">{title}</h3>
+      <div className="flex flex-wrap items-end gap-x-4 gap-y-3">{children}</div>
+    </div>
+  );
+}
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="block">
