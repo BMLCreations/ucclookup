@@ -277,7 +277,7 @@ export function SignalCard({ tone, label, detail }: { tone: "up" | "down" | "war
   return (
     <div className={`rounded-xl border p-3.5 shadow-sm ${bg[tone]}`}>
       <div className={`text-sm font-semibold ${fg[tone]}`}>{label}</div>
-      <div className="mt-0.5 text-xs leading-relaxed text-slate-500">{detail}</div>
+      <div className="mt-0.5 text-pretty text-xs leading-relaxed text-slate-500">{detail}</div>
     </div>
   );
 }

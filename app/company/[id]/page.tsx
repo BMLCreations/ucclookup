@@ -2,10 +2,10 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { DataTable, Stat, Collapsible, StatusPill, TaxBadge, EntityStatusBadge, SignalCard, ExpiringSoonBadge, isExpiringSoon, LockedSection } from "../../components";
 import { getSessionUser } from "@/lib/auth";
-import { fmtDate } from "@/lib/format";
+import { fmtDate, fmtAddress, streetKey, type AddrRow } from "@/lib/format";
 import { BackButton } from "../../back-button";
 import {
-  businessHeadline, businessFilings, businessPrincipals, businessLiens, relatedCompanies,
+  businessHeadline, businessAddresses, businessFilings, businessPrincipals, businessLiens, relatedCompanies,
   businessRegistry, businessFundersList, businessTimeline,
   type BizFiling, type BizPrincipal, type LienRow, type RelatedCompany, type FunderBrief,
 } from "@/lib/features";
@@ -23,7 +23,7 @@ export default async function CompanyProfile({ params }: { params: Promise<{ id:
   const [head] = await businessHeadline(bizNorm);
   if (!head) notFound();
 
-  const [filings, principals, liens, related, registry, funders, timeline] = await Promise.all([
+  const [filings, principals, liens, related, registry, funders, timeline, uccAddrs] = await Promise.all([
     businessFilings(bizNorm),
     businessPrincipals(bizNorm),
     businessLiens(bizNorm),
@@ -31,11 +31,21 @@ export default async function CompanyProfile({ params }: { params: Promise<{ id:
     businessRegistry(bizNorm),
     businessFundersList(bizNorm),
     businessTimeline(bizNorm),
+    businessAddresses(bizNorm),
   ]);
 
   const location = [head.city, head.state].filter(Boolean).join(", ");
   const liensLabel = liens.length >= 100 ? "100+" : String(liens.length);
   const reg = registry[0];
+
+  // Address list: UCC-filing addresses (deduped) + the Sunbiz registered address if distinct.
+  const addrs: AddrRow[] = [...uccAddrs];
+  if (reg?.principal_addr1) {
+    const regAddr: AddrRow = { addr1: reg.principal_addr1, addr2: reg.principal_addr2, city: reg.principal_city, state: reg.principal_state, postal_code: reg.principal_postal, source: "registered" };
+    if (!addrs.some((a) => streetKey(a) === streetKey(regAddr))) addrs.push(regAddr);
+  }
+  const address = fmtAddress(addrs[0]);
+  const otherAddrs = addrs.slice(1);
 
   // At-a-glance signals (replaces the funding-by-year chart).
   const trend = fundingTrend(timeline, head.last_filing, head.ucc_count);
@@ -58,7 +68,7 @@ export default async function CompanyProfile({ params }: { params: Promise<{ id:
         </span>
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-slate-900">{head.biz_name}</h1>
-          <p className="text-sm text-slate-500">{location || "—"} · Business</p>
+          <p className="text-sm text-slate-500">{address || location || "—"} · Business</p>
         </div>
       </div>
 
@@ -70,11 +80,30 @@ export default async function CompanyProfile({ params }: { params: Promise<{ id:
         </div>
       )}
 
+      {otherAddrs.length > 0 && (
+        <div className="mt-4">
+          <Collapsible title="Other addresses on file" count={otherAddrs.length}>
+            <div className="space-y-2">
+              {otherAddrs.map((a, i) => (
+                <div key={i} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm">
+                  <div className="text-slate-700">{fmtAddress(a)}</div>
+                  <div className="mt-0.5 text-xs text-slate-400">
+                    {a.source === "registered"
+                      ? "Registered address (Sunbiz)"
+                      : `Last used ${fmtDate(a.last_filing)}${a.filings ? ` · ${a.filings} filing${a.filings === 1 ? "" : "s"}` : ""}`}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Collapsible>
+        </div>
+      )}
+
       <div className="my-7 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         <Stat label="Total UCC filings" value={head.ucc_count.toLocaleString()} />
         <Stat label="Active liens" value={head.active_liens.toLocaleString()} />
         <Stat label="Distinct funders" value={head.distinct_funders.toLocaleString()} />
-        <Stat label="Filings · last 6 mo" value={head.ucc_6mo.toLocaleString()} />
+        <Stat label="Filings · last 12 mo" value={head.ucc_12mo.toLocaleString()} />
         <Stat label="Last filing" value={fmtDate(head.last_filing)} />
         <Stat label="Tax liens / judgments" value={liensLabel} tone={liens.length > 0 ? "warn" : "default"} />
       </div>
@@ -210,8 +239,8 @@ function fundingTrend(timeline: { period: string; n: number }[], lastFiling: str
   const earlier = yrs.filter((o) => o.y < thisYear - 1);
   const earlierAvg = earlier.length ? earlier.reduce((s, o) => s + o.n, 0) / earlier.length : 0;
   if (recent >= 2 && recent / 2 > earlierAvg * 1.5)
-    return { tone: "up", label: "Accelerating", detail: `${recent} advances in the last 2 years${earlierAvg ? `, up from ~${earlierAvg.toFixed(0)}/yr` : ""}${recency ? ` · ${recency}` : ""}` };
+    return { tone: "up", label: "Accelerating", detail: `~${(recent / 2).toFixed(0)}/yr now${earlierAvg ? `, up from ~${earlierAvg.toFixed(0)}/yr before` : ""}${recency ? ` · ${recency}` : ""}` };
   if (earlierAvg > 0 && recent / 2 < earlierAvg * 0.5)
-    return { tone: "down", label: "Slowing", detail: `${recent} in the last 2 years, down from ~${earlierAvg.toFixed(0)}/yr${recency ? ` · ${recency}` : ""}` };
+    return { tone: "down", label: "Slowing", detail: `~${(recent / 2).toFixed(0)}/yr now, down from ~${earlierAvg.toFixed(0)}/yr before${recency ? ` · ${recency}` : ""}` };
   return { tone: "neutral", label: "Steady", detail: `~${(total / yrs.length).toFixed(0)} advances/yr${recency ? ` · ${recency}` : ""}` };
 }

@@ -4,6 +4,7 @@
 // Live lookups (feed by funder, name search) hit the raw tables but use indexes
 // (functional normalize_name indexes + pg_trgm trigram indexes for LIKE '%x%').
 import { q } from './db';
+import { dedupeAddresses, type AddrRow } from './format';
 
 // Profile ids are namespaced by jurisdiction: "FL:acme" or "FL:NAME|CITY|STATE".
 // normalize_name() strips ':' from real names, so the prefix is unambiguous.
@@ -267,14 +268,42 @@ export function businessHeadline(bizNorm: string) {
   );
 }
 
+// Distinct street addresses a company listed on its UCC filings (public record),
+// deduped (Suite/Ste/# variants merged) with last-seen date + filing count, newest first.
+export function businessAddresses(bizNorm: string) {
+  const [juris, bare] = splitJuris(bizNorm);
+  return q<AddrRow>(
+    `SELECT (array_agg(d.addr1 ORDER BY f.filing_date DESC))[1] AS addr1,
+            (array_agg(nullif(d.addr2,'') ORDER BY f.filing_date DESC))[1] AS addr2,
+            (array_agg(d.city ORDER BY f.filing_date DESC))[1] AS city,
+            (array_agg(d.state ORDER BY f.filing_date DESC))[1] AS state,
+            (array_agg(nullif(d.postal_code,'') ORDER BY f.filing_date DESC))[1] AS postal_code,
+            max(f.filing_date)::date::text AS last_filing,
+            count(DISTINCT d.ucc1_num)::int AS filings
+     FROM ucc_debtors d
+     JOIN ucc_filings f ON f.ucc1_num = d.ucc1_num AND f.ucc3_num = d.ucc3_num
+          AND f.filing_type_id='UCC' AND f.action_type='Lien Financing Stmt'
+     WHERE d.debtor_type='Organization' AND normalize_name(d.org_name) = $1 AND d.juris = $2
+       AND coalesce(nullif(btrim(d.addr1),''),'') <> ''
+     GROUP BY upper(btrim(d.addr1)), upper(btrim(d.city)), upper(btrim(d.state))
+     ORDER BY max(f.filing_date) DESC LIMIT 30`,
+    [bare, juris],
+  ).then(dedupeAddresses);
+}
+
 // CA business-registry facts for a company. A normalized name can map to several
 // registered entities; pick the best (prefer Active, then most recently active).
-export type BizRegistry = { entity_name: string; entity_status: string; entity_type: string; agent: string | null };
+export type BizRegistry = {
+  entity_name: string; entity_status: string; entity_type: string; agent: string | null;
+  principal_addr1: string | null; principal_addr2: string | null; principal_city: string | null;
+  principal_state: string | null; principal_postal: string | null;
+};
 export function businessRegistry(bizNorm: string) {
   const [juris, bare] = splitJuris(bizNorm);
   return q<BizRegistry>(
     `SELECT e.entity_name, e.entity_status, e.entity_type,
-            coalesce(nullif(btrim(a.org_name),''), nullif(btrim(a.first_name||' '||a.last_name),'')) AS agent
+            coalesce(nullif(btrim(a.org_name),''), nullif(btrim(a.first_name||' '||a.last_name),'')) AS agent,
+            e.principal_addr1, e.principal_addr2, e.principal_city, e.principal_state, e.principal_postal
      FROM be_entities e
      LEFT JOIN be_agents a ON a.entity_num = e.entity_num AND a.juris = e.juris
      WHERE normalize_name(e.entity_name) = $1 AND e.juris = $2
@@ -536,6 +565,29 @@ export function personFilings(personKey: string) {
     filingSql(`d.debtor_type = 'Individual' AND f.filing_type_id = 'UCC' AND ${PERSON_MATCH} AND d.juris = $4`),
     [nameNorm, city, state, juris],
   );
+}
+
+// Distinct street addresses this individual listed on UCC filings (public record), deduped.
+export function personAddresses(personKey: string) {
+  const [juris, rest] = splitJuris(personKey);
+  const [nameNorm = "", city = "", state = ""] = rest.split("|");
+  return q<AddrRow>(
+    `SELECT (array_agg(d.addr1 ORDER BY f.filing_date DESC))[1] AS addr1,
+            (array_agg(nullif(d.addr2,'') ORDER BY f.filing_date DESC))[1] AS addr2,
+            (array_agg(d.city ORDER BY f.filing_date DESC))[1] AS city,
+            (array_agg(d.state ORDER BY f.filing_date DESC))[1] AS state,
+            (array_agg(nullif(d.postal_code,'') ORDER BY f.filing_date DESC))[1] AS postal_code,
+            max(f.filing_date)::date::text AS last_filing,
+            count(DISTINCT d.ucc1_num)::int AS filings
+     FROM ucc_debtors d
+     JOIN ucc_filings f ON f.ucc1_num = d.ucc1_num AND f.ucc3_num = d.ucc3_num
+          AND f.filing_type_id='UCC' AND f.action_type='Lien Financing Stmt'
+     WHERE d.debtor_type='Individual' AND ${PERSON_MATCH} AND d.juris = $4
+       AND coalesce(nullif(btrim(d.addr1),''),'') <> ''
+     GROUP BY upper(btrim(d.addr1)), upper(btrim(d.city)), upper(btrim(d.state))
+     ORDER BY max(f.filing_date) DESC LIMIT 30`,
+    [nameNorm, city, state, juris],
+  ).then(dedupeAddresses);
 }
 
 // Co-owners: other people who are principals on the SAME companies as this person

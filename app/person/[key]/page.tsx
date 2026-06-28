@@ -2,10 +2,10 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { DataTable, Stat, Collapsible, StatusPill, NextRenewalCallout, ExpiringSoonBadge, isExpiringSoon, LockedSection } from "../../components";
 import { getSessionUser } from "@/lib/auth";
-import { fmtDate } from "@/lib/format";
+import { fmtDate, fmtAddress } from "@/lib/format";
 import { BackButton } from "../../back-button";
 import {
-  personHeadline, personFilings, personCompanies, personLiens, personCoOwners,
+  personHeadline, personAddresses, personFilings, personCompanies, personLiens, personCoOwners,
   type BizFiling, type PersonCompany, type LienRow, type CoOwner,
 } from "@/lib/features";
 
@@ -22,14 +22,17 @@ export default async function PersonProfile({ params }: { params: Promise<{ key:
   const [head] = await personHeadline(personKey);
   if (!head) notFound();
 
-  const [filings, companies, liens, coOwners] = await Promise.all([
+  const [filings, companies, liens, coOwners, uccAddrs] = await Promise.all([
     personFilings(personKey),
     personCompanies(personKey),
     personLiens(personKey),
     personCoOwners(personKey),
+    personAddresses(personKey),
   ]);
 
   const location = [head.city, head.state].filter(Boolean).join(", ");
+  const address = fmtAddress(uccAddrs[0]);
+  const otherAddrs = uccAddrs.slice(1);
   const liensLabel = liens.length >= 100 ? "100+" : String(liens.length);
 
   return (
@@ -42,9 +45,26 @@ export default async function PersonProfile({ params }: { params: Promise<{ key:
         </span>
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-slate-900">{head.person_name}</h1>
-          <p className="text-sm text-slate-500">{location || "—"} · Individual</p>
+          <p className="text-sm text-slate-500">{address || location || "—"} · Individual</p>
         </div>
       </div>
+
+      {otherAddrs.length > 0 && (
+        <div className="mt-4">
+          <Collapsible title="Other addresses on file" count={otherAddrs.length}>
+            <div className="space-y-2">
+              {otherAddrs.map((a, i) => (
+                <div key={i} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm">
+                  <div className="text-slate-700">{fmtAddress(a)}</div>
+                  <div className="mt-0.5 text-xs text-slate-400">
+                    Last used {fmtDate(a.last_filing)}{a.filings ? ` · ${a.filings} filing${a.filings === 1 ? "" : "s"}` : ""}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Collapsible>
+        </div>
+      )}
 
       {pro && <NextRenewalCallout date={head.next_expiry} />}
 
