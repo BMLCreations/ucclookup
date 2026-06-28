@@ -49,23 +49,6 @@ export default async function PersonProfile({ params }: { params: Promise<{ key:
         </div>
       </div>
 
-      {otherAddrs.length > 0 && (
-        <div className="mt-4">
-          <Collapsible title="Other addresses on file" count={otherAddrs.length}>
-            <div className="space-y-2">
-              {otherAddrs.map((a, i) => (
-                <div key={i} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm">
-                  <div className="text-slate-700">{fmtAddress(a)}</div>
-                  <div className="mt-0.5 text-xs text-slate-400">
-                    Last used {fmtDate(a.last_filing)}{a.filings ? ` · ${a.filings} filing${a.filings === 1 ? "" : "s"}` : ""}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </Collapsible>
-        </div>
-      )}
-
       {pro && <NextRenewalCallout date={head.next_expiry} />}
 
       <div className="my-7 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
@@ -160,6 +143,23 @@ export default async function PersonProfile({ params }: { params: Promise<{ key:
           <LockedSection label="Co-owners (people network)" />
         )}
       </div>
+
+      {otherAddrs.length > 0 && (
+        <div className="mt-7">
+          <Collapsible title="Other addresses on file" count={otherAddrs.length}>
+            <div className="space-y-2">
+              {otherAddrs.map((a, i) => (
+                <div key={i} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm">
+                  <div className="text-slate-700">{fmtAddress(a)}</div>
+                  <div className="mt-0.5 text-xs text-slate-400">
+                    Last used {fmtDate(a.last_filing)}{a.filings ? ` · ${a.filings} filing${a.filings === 1 ? "" : "s"}` : ""}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Collapsible>
+        </div>
+      )}
     </div>
   );
 }
