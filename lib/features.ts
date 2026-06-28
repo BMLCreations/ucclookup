@@ -272,16 +272,15 @@ export function businessHeadline(bizNorm: string) {
 export type BizRegistry = { entity_name: string; entity_status: string; entity_type: string; agent: string | null };
 export function businessRegistry(bizNorm: string) {
   const [juris, bare] = splitJuris(bizNorm);
-  if (juris !== "CA") return Promise.resolve([] as BizRegistry[]); // registry is CA-only until FL Sunbiz (Stage 2)
   return q<BizRegistry>(
     `SELECT e.entity_name, e.entity_status, e.entity_type,
             coalesce(nullif(btrim(a.org_name),''), nullif(btrim(a.first_name||' '||a.last_name),'')) AS agent
      FROM be_entities e
-     LEFT JOIN be_agents a ON a.entity_num = e.entity_num
-     WHERE normalize_name(e.entity_name) = $1
+     LEFT JOIN be_agents a ON a.entity_num = e.entity_num AND a.juris = e.juris
+     WHERE normalize_name(e.entity_name) = $1 AND e.juris = $2
      ORDER BY (e.entity_status='Active') DESC, e.last_si_file_date DESC NULLS LAST
      LIMIT 1`,
-    [bare],
+    [bare, juris],
   );
 }
 
@@ -421,34 +420,33 @@ export type RelatedCompany = {
 };
 export function relatedCompanies(bizNorm: string) {
   const [juris, bare] = splitJuris(bizNorm);
-  if (juris !== "CA") return Promise.resolve([] as RelatedCompany[]); // owner network is CA-only until FL Sunbiz (Stage 2)
   return q<RelatedCompany>(
     `WITH my_principals AS (
        SELECT DISTINCT upper(btrim(p.first_name))||' '||upper(btrim(p.last_name)) AS pname,
               nullif(upper(btrim(p.city)),'') AS pcity
-       FROM be_entities e JOIN be_principals p ON p.entity_num = e.entity_num
-       WHERE normalize_name(e.entity_name) = $1 AND p.last_name <> ''
+       FROM be_entities e JOIN be_principals p ON p.entity_num = e.entity_num AND p.juris = e.juris
+       WHERE normalize_name(e.entity_name) = $1 AND e.juris = $2 AND p.last_name <> ''
      ),
      owners AS (  -- drop nominees: a principal listed on > 25 companies is an agent
        SELECT pname, pcity FROM my_principals mp
        WHERE (SELECT count(*) FROM be_principals bp
-              WHERE upper(btrim(bp.first_name))||' '||upper(btrim(bp.last_name)) = mp.pname) <= 25
+              WHERE bp.juris = $2 AND upper(btrim(bp.first_name))||' '||upper(btrim(bp.last_name)) = mp.pname) <= 25
      ),
      related AS (
        SELECT DISTINCT normalize_name(e2.entity_name) AS biz_norm, o.pname
        FROM owners o
-       JOIN be_principals p2 ON upper(btrim(p2.first_name))||' '||upper(btrim(p2.last_name)) = o.pname
+       JOIN be_principals p2 ON p2.juris = $2 AND upper(btrim(p2.first_name))||' '||upper(btrim(p2.last_name)) = o.pname
             AND (o.pcity IS NULL OR upper(btrim(p2.city)) = o.pcity)
-       JOIN be_entities e2 ON e2.entity_num = p2.entity_num
+       JOIN be_entities e2 ON e2.entity_num = p2.entity_num AND e2.juris = p2.juris
        WHERE normalize_name(e2.entity_name) <> $1
      )
-     SELECT 'CA:' || r.biz_norm AS biz_norm, max(b.biz_name) AS biz_name,
+     SELECT $2 || ':' || r.biz_norm AS biz_norm, max(b.biz_name) AS biz_name,
             string_agg(DISTINCT initcap(lower(r.pname)), ', ') AS via,
             max(b.ucc_count) AS ucc_count, max(b.active_liens) AS active_liens, max(b.tax_liens) AS tax_liens
-     FROM related r JOIN prof_business b ON b.biz_norm = 'CA:' || r.biz_norm
+     FROM related r JOIN prof_business b ON b.biz_norm = $2 || ':' || r.biz_norm
      GROUP BY r.biz_norm
      ORDER BY max(b.ucc_count) DESC LIMIT 50`,
-    [bare],
+    [bare, juris],
   );
 }
 
@@ -459,18 +457,17 @@ const PRINCIPAL_KEY = `upper(btrim(p.first_name))||' '||upper(btrim(p.last_name)
   coalesce(nullif(upper(btrim(p.city)),''),'')||'|'||coalesce(nullif(upper(btrim(p.state)),''),'')`;
 export function businessPrincipals(bizNorm: string) {
   const [juris, bare] = splitJuris(bizNorm);
-  if (juris !== "CA") return Promise.resolve([] as BizPrincipal[]); // principals are CA-only until FL Sunbiz (Stage 2)
   return q<BizPrincipal>(
     `SELECT DISTINCT initcap(lower(p.first_name || ' ' || p.last_name)) AS name,
             p.position_type AS role, e.entity_name,
-            'CA:' || ${PRINCIPAL_KEY} AS person_key,
+            $2 || ':' || ${PRINCIPAL_KEY} AS person_key,
             (pi.person_key IS NOT NULL) AS has_profile
      FROM be_entities e
-     JOIN be_principals p ON p.entity_num = e.entity_num
-     LEFT JOIN prof_individual pi ON pi.person_key = 'CA:' || ${PRINCIPAL_KEY}
-     WHERE normalize_name(e.entity_name) = $1 AND p.last_name <> ''
+     JOIN be_principals p ON p.entity_num = e.entity_num AND p.juris = e.juris
+     LEFT JOIN prof_individual pi ON pi.person_key = $2 || ':' || ${PRINCIPAL_KEY}
+     WHERE normalize_name(e.entity_name) = $1 AND e.juris = $2 AND p.last_name <> ''
      ORDER BY e.entity_name, name LIMIT 100`,
-    [bare],
+    [bare, juris],
   );
 }
 
@@ -547,35 +544,34 @@ export function personFilings(personKey: string) {
 export type CoOwner = { name: string; city: string; state: string; shared: number; person_key: string; has_profile: boolean };
 export function personCoOwners(personKey: string) {
   const [juris, rest] = splitJuris(personKey);
-  if (juris !== "CA") return Promise.resolve([] as CoOwner[]); // co-owner network is CA-only until FL Sunbiz (Stage 2)
   const [nameNorm = "", city = ""] = rest.split("|");
   return q<CoOwner>(
     `WITH me AS (
        SELECT DISTINCT p.entity_num FROM be_principals p
        WHERE upper(btrim(p.first_name))||' '||upper(btrim(p.last_name)) = $1
-         AND ($2 = '' OR upper(btrim(p.city)) = $2) AND p.last_name <> ''
+         AND ($2 = '' OR upper(btrim(p.city)) = $2) AND p.last_name <> '' AND p.juris = $3
        LIMIT 200
      ),
      co AS (
        SELECT upper(btrim(p2.first_name))||' '||upper(btrim(p2.last_name)) AS cname,
               nullif(upper(btrim(p2.city)),'') AS ccity, nullif(upper(btrim(p2.state)),'') AS cstate,
               count(DISTINCT p2.entity_num) AS shared
-       FROM me JOIN be_principals p2 ON p2.entity_num = me.entity_num AND p2.last_name <> ''
+       FROM me JOIN be_principals p2 ON p2.entity_num = me.entity_num AND p2.juris = $3 AND p2.last_name <> ''
        WHERE upper(btrim(p2.first_name))||' '||upper(btrim(p2.last_name)) <> $1
        GROUP BY 1, 2, 3
      ),
      guard AS (  -- drop nominees: a co-owner listed on > 25 companies is an agent
        SELECT cname, ccity, cstate, shared FROM co
        WHERE (SELECT count(*) FROM be_principals bp
-              WHERE upper(btrim(bp.first_name))||' '||upper(btrim(bp.last_name)) = co.cname) <= 25
+              WHERE bp.juris = $3 AND upper(btrim(bp.first_name))||' '||upper(btrim(bp.last_name)) = co.cname) <= 25
      )
      SELECT initcap(lower(g.cname)) AS name, coalesce(g.ccity,'') AS city, coalesce(g.cstate,'') AS state,
-            g.shared, 'CA:' || g.cname||'|'||coalesce(g.ccity,'')||'|'||coalesce(g.cstate,'') AS person_key,
+            g.shared, $3 || ':' || g.cname||'|'||coalesce(g.ccity,'')||'|'||coalesce(g.cstate,'') AS person_key,
             (pi.person_key IS NOT NULL) AS has_profile
      FROM guard g
-     LEFT JOIN prof_individual pi ON pi.person_key = 'CA:' || g.cname||'|'||coalesce(g.ccity,'')||'|'||coalesce(g.cstate,'')
+     LEFT JOIN prof_individual pi ON pi.person_key = $3 || ':' || g.cname||'|'||coalesce(g.ccity,'')||'|'||coalesce(g.cstate,'')
      ORDER BY g.shared DESC, (pi.person_key IS NOT NULL) DESC LIMIT 50`,
-    [nameNorm, city],
+    [nameNorm, city, juris],
   );
 }
 
@@ -596,18 +592,17 @@ export type PersonCompany = { biz_norm: string; entity_name: string; entity_type
 // appeared as a UCC debtor.
 export function personCompanies(personKey: string) {
   const [juris, rest] = splitJuris(personKey);
-  if (juris !== "CA") return Promise.resolve([] as PersonCompany[]); // CA registry only until FL Sunbiz (Stage 2)
   const [nameNorm = "", city = ""] = rest.split("|");
   return q<PersonCompany>(
-    `SELECT DISTINCT 'CA:' || normalize_name(e.entity_name) AS biz_norm,
+    `SELECT DISTINCT $3 || ':' || normalize_name(e.entity_name) AS biz_norm,
             e.entity_name, e.entity_type, p.position_type AS role,
             coalesce(nullif(p.city,''),'') AS city, coalesce(nullif(p.state,''),'') AS state
      FROM be_principals p
-     JOIN be_entities e ON e.entity_num = p.entity_num
+     JOIN be_entities e ON e.entity_num = p.entity_num AND e.juris = p.juris
      WHERE upper(btrim(p.first_name)) || ' ' || upper(btrim(p.last_name)) = $1
-       AND p.last_name <> ''
+       AND p.last_name <> '' AND p.juris = $3
        AND ($2 = '' OR upper(btrim(p.city)) = $2)
      ORDER BY e.entity_name LIMIT 100`,
-    [nameNorm, city],
+    [nameNorm, city, juris],
   );
 }
