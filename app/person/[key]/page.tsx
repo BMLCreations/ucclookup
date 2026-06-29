@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { DataTable, Stat, Collapsible, StatusPill, NextRenewalCallout, ExpiringSoonBadge, isExpiringSoon, LockedSection } from "../../components";
+import { DataTable, Stat, Collapsible, StatusPill, NextRenewalCallout, McaBadge, ExpiringSoonBadge, isExpiringSoon, LockedSection } from "../../components";
 import { getSessionUser } from "@/lib/auth";
 import { fmtDate, fmtAddress } from "@/lib/format";
 import { BackButton } from "../../back-button";
@@ -11,13 +11,15 @@ import {
 
 export const dynamic = "force-dynamic";
 
-export default async function PersonProfile({ params }: { params: Promise<{ key: string }> }) {
+export default async function PersonProfile({ params, searchParams }: { params: Promise<{ key: string }>; searchParams: Promise<{ lead?: string }> }) {
   const user = await getSessionUser();
   if (!user) redirect("/login");
   const pro = user.plan === "pro";
 
   const { key } = await params;
   const personKey = decodeURIComponent(key);
+  // MCA exposure: Pro-only, surfaced only when opened from Lead Gen (?lead=1).
+  const fromLead = (await searchParams).lead === "1";
 
   const [head] = await personHeadline(personKey);
   if (!head) notFound();
@@ -35,6 +37,12 @@ export default async function PersonProfile({ params }: { params: Promise<{ key:
   const otherAddrs = uccAddrs.slice(1);
   const liensLabel = liens.length >= 100 ? "100+" : String(liens.length);
 
+  // MCA exposure across this person's UCC liens (advances vs. bank/equipment).
+  const mcaFunders = new Set(filings.filter((f) => f.is_mca).map((f) => f.funder_norm)).size;
+  const mcaLiens = filings.filter((f) => f.is_mca).length;
+  const showMca = pro && fromLead;
+  const mcaTeaser = fromLead && !pro && mcaFunders > 0;
+
   return (
     <div>
       <BackButton />
@@ -50,6 +58,19 @@ export default async function PersonProfile({ params }: { params: Promise<{ key:
       </div>
 
       {pro && <NextRenewalCallout date={head.next_expiry} />}
+
+      {showMca && mcaFunders > 0 && (
+        <div className="mt-3 inline-flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-4 w-4 text-rose-600">
+            <path d="M12 2v20M5 5h11a3 3 0 0 1 0 6H8a3 3 0 0 0 0 6h11" />
+          </svg>
+          <span className="font-semibold text-rose-700">{mcaFunders === 1 ? "1 MCA advance on file" : `Stacked with ${mcaFunders} MCA shops`}</span>
+          <span className="text-rose-700">· {mcaLiens} of {filings.length} lien{filings.length === 1 ? "" : "s"} from cash-advance funders</span>
+        </div>
+      )}
+      {mcaTeaser && (
+        <div className="mt-3 max-w-md"><LockedSection label="MCA exposure · which funders are cash-advance shops" /></div>
+      )}
 
       <div className="my-7 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         <Stat label="Total UCC filings" value={head.ucc_count.toLocaleString()} />
@@ -69,7 +90,7 @@ export default async function PersonProfile({ params }: { params: Promise<{ key:
               { key: "funder", label: "Secured party", render: (r) => (
                   <div>
                     {r.funder
-                      ? <Link href={`/funder/${encodeURIComponent(r.funder_norm)}`} className="font-medium text-indigo-700 hover:underline">{r.funder}</Link>
+                      ? <span><Link href={`/funder/${encodeURIComponent(r.funder_norm)}`} className="font-medium text-indigo-700 hover:underline">{r.funder}</Link>{showMca && r.is_mca && <McaBadge />}</span>
                       : <span className="font-medium text-slate-900">—</span>}
                     {r.funder_loc && <div className="text-xs text-slate-400">{r.funder_loc}</div>}
                   </div>

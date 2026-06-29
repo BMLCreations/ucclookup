@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { DataTable, Stat, Collapsible, StatusPill, TaxBadge, EntityStatusBadge, SignalCard, ExpiringSoonBadge, isExpiringSoon, LockedSection } from "../../components";
+import { DataTable, Stat, Collapsible, StatusPill, TaxBadge, EntityStatusBadge, SignalCard, McaBadge, ExpiringSoonBadge, isExpiringSoon, LockedSection } from "../../components";
 import { getSessionUser } from "@/lib/auth";
 import { fmtDate, fmtAddress, streetKey, type AddrRow } from "@/lib/format";
 import { BackButton } from "../../back-button";
@@ -12,13 +12,16 @@ import {
 
 export const dynamic = "force-dynamic";
 
-export default async function CompanyProfile({ params }: { params: Promise<{ id: string }> }) {
+export default async function CompanyProfile({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ lead?: string }> }) {
   const user = await getSessionUser();
   if (!user) redirect("/login");
   const pro = user.plan === "pro";
 
   const { id } = await params;
   const bizNorm = decodeURIComponent(id);
+  // MCA exposure is a Pro, lead-working feature — only surfaced when the profile
+  // was opened from the Lead Gen page (marked with ?lead=1).
+  const fromLead = (await searchParams).lead === "1";
 
   const [head] = await businessHeadline(bizNorm);
   if (!head) notFound();
@@ -46,6 +49,14 @@ export default async function CompanyProfile({ params }: { params: Promise<{ id:
   }
   const address = fmtAddress(addrs[0]);
   const otherAddrs = addrs.slice(1);
+
+  // MCA exposure — how many of this merchant's liens are from merchant-cash-advance
+  // funders (vs. banks/equipment). The core "is this a stacked refi lead?" signal.
+  // Pro-only, and only surfaced when opened from Lead Gen.
+  const mcaFunders = new Set(filings.filter((f) => f.is_mca).map((f) => f.funder_norm)).size;
+  const mcaLiens = filings.filter((f) => f.is_mca).length;
+  const showMca = pro && fromLead;            // tags + exposure card
+  const mcaTeaser = fromLead && !pro && mcaFunders > 0;  // Pro lock for Free users
 
   // At-a-glance signals (replaces the funding-by-year chart).
   const trend = fundingTrend(timeline, head.last_filing, head.ucc_count);
@@ -89,6 +100,20 @@ export default async function CompanyProfile({ params }: { params: Promise<{ id:
         <Stat label="Tax liens / judgments" value={liensLabel} tone={liens.length > 0 ? "warn" : "default"} />
       </div>
 
+      {/* MCA exposure — Pro, lead-working only. Banner for Pro; lock for Free. */}
+      {showMca && mcaFunders > 0 && (
+        <div className="mb-3 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-4 w-4 text-rose-600">
+            <path d="M12 2v20M5 5h11a3 3 0 0 1 0 6H8a3 3 0 0 0 0 6h11" />
+          </svg>
+          <span className="font-semibold text-rose-700">{mcaFunders === 1 ? "1 MCA advance on file" : `Stacked with ${mcaFunders} MCA shops`}</span>
+          <span className="text-rose-600">· {mcaLiens} of {filings.length} UCC lien{filings.length === 1 ? "" : "s"} from merchant cash-advance funders</span>
+        </div>
+      )}
+      {mcaTeaser && (
+        <div className="mb-3"><LockedSection label="MCA exposure · which funders are cash-advance shops" /></div>
+      )}
+
       {/* Signals row — at-a-glance read on the lead */}
       {signals.length > 0 && (
         <div className="mb-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -106,7 +131,10 @@ export default async function CompanyProfile({ params }: { params: Promise<{ id:
             empty="No funders on record."
             columns={[
               { key: "funder", label: "Funder", className: "font-medium", render: (r) => (
-                  <Link href={`/funder/${encodeURIComponent(r.funder_norm)}`} className="font-medium text-indigo-700 hover:underline">{r.funder}</Link>
+                  <span>
+                    <Link href={`/funder/${encodeURIComponent(r.funder_norm)}`} className="font-medium text-indigo-700 hover:underline">{r.funder}</Link>
+                    {showMca && r.is_mca && <McaBadge />}
+                  </span>
                 ) },
               { key: "liens", label: "Liens", className: "text-center nums" },
               { key: "last_filing", label: "Last filing", render: (r) => fmtDate(r.last_filing) },
@@ -122,7 +150,7 @@ export default async function CompanyProfile({ params }: { params: Promise<{ id:
               { key: "funder", label: "Secured party", render: (r) => (
                   <div>
                     {r.funder
-                      ? <Link href={`/funder/${encodeURIComponent(r.funder_norm)}`} className="font-medium text-indigo-700 hover:underline">{r.funder}</Link>
+                      ? <span><Link href={`/funder/${encodeURIComponent(r.funder_norm)}`} className="font-medium text-indigo-700 hover:underline">{r.funder}</Link>{showMca && r.is_mca && <McaBadge />}</span>
                       : <span className="font-medium text-slate-900">—</span>}
                     {r.funder_loc && <div className="text-xs text-slate-400">{r.funder_loc}</div>}
                   </div>

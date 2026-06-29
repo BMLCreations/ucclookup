@@ -315,16 +315,18 @@ export function businessRegistry(bizNorm: string) {
 
 // The distinct funders (secured parties) on a merchant's UCC liens, with how many
 // liens each and the most recent. funder_norm lets us link to a funder profile.
-export type FunderBrief = { funder: string; funder_norm: string; liens: number; last_filing: string };
+export type FunderBrief = { funder: string; funder_norm: string; liens: number; last_filing: string; is_mca: boolean };
 export function businessFundersList(bizNorm: string) {
   const [juris, bare] = splitJuris(bizNorm);
   return q<FunderBrief>(
     `SELECT coalesce(sp.org_name,'') AS funder, normalize_name(sp.org_name) AS funder_norm,
-            count(DISTINCT f.ucc1_num)::int AS liens, max(f.filing_date)::date::text AS last_filing
+            count(DISTINCT f.ucc1_num)::int AS liens, max(f.filing_date)::date::text AS last_filing,
+            bool_or(coalesce(fm.is_mca, false)) AS is_mca
      FROM ucc_debtors d
      JOIN ucc_filings f ON f.ucc1_num = d.ucc1_num AND f.ucc3_num = d.ucc3_num
           AND f.filing_type_id='UCC' AND f.action_type='Lien Financing Stmt'
      JOIN ucc_secured_parties sp ON sp.ucc1_num = f.ucc1_num AND sp.ucc3_num = f.ucc3_num AND sp.org_name <> ''
+     LEFT JOIN funder_mca fm ON fm.funder_norm = normalize_name(sp.org_name)
      WHERE d.debtor_type='Organization' AND normalize_name(d.org_name) = $1 AND d.juris = $2
      GROUP BY 1, 2 ORDER BY liens DESC, last_filing DESC LIMIT 50`,
     [bare, juris],
@@ -348,6 +350,7 @@ export function businessTimeline(bizNorm: string) {
 export type BizFiling = {
   filed: string; funder: string; funder_norm: string; funder_loc: string | null;
   status: string; lapse: string; debtor_addr: string | null; filing_num: string;
+  is_mca: boolean;
 };
 
 // Enriched lien row, DEDUPED to one row per filing (a debtor is often listed
@@ -357,12 +360,13 @@ export type BizFiling = {
 // continued lapse date, the debtor address on that filing, and the filing number.
 function filingSql(where: string): string {
   return `
-    SELECT filed, funder, funder_norm, funder_loc, debtor_addr, filing_num, status, lapse FROM (
+    SELECT filed, funder, funder_norm, funder_loc, debtor_addr, filing_num, status, lapse, is_mca FROM (
       SELECT DISTINCT ON (f.ucc1_num)
         f.filing_date AS fd,
         f.filing_date::date::text AS filed,
         coalesce(sp.org_name, '') AS funder,
         coalesce(normalize_name(sp.org_name), '') AS funder_norm,
+        coalesce(fm.is_mca, false) AS is_mca,
         nullif(btrim(coalesce(nullif(sp.city,''),'') ||
           CASE WHEN nullif(sp.state,'') IS NOT NULL THEN ', ' || sp.state ELSE '' END), ',') AS funder_loc,
         nullif(btrim(coalesce(nullif(d.addr1,''),'') ||
@@ -383,6 +387,7 @@ function filingSql(where: string): string {
         SELECT bool_or(a.action_type = 'Termination') AS terminated, max(a.lapse_date) AS max_lapse
         FROM ucc_filings a WHERE a.ucc1_num = f.ucc1_num AND a.filing_type_id = 'UCC'
       ) life ON true
+      LEFT JOIN funder_mca fm ON fm.funder_norm = normalize_name(sp.org_name) AND fm.is_mca
       WHERE ${where} AND f.action_type = 'Lien Financing Stmt'
       ORDER BY f.ucc1_num
     ) x ORDER BY fd DESC LIMIT 300`;

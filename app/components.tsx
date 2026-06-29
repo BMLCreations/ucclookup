@@ -147,6 +147,16 @@ export function TaxBadge({ n }: { n: number }) {
   );
 }
 
+// "MCA" tag for a secured party we've classified as a merchant-cash-advance shop
+// (from the funder_mca table). Marks which liens are advances vs. bank/equipment.
+export function McaBadge() {
+  return (
+    <span className="ml-1.5 inline-flex items-center rounded-full bg-rose-50 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-rose-700 ring-1 ring-inset ring-rose-600/20">
+      MCA
+    </span>
+  );
+}
+
 // Full-width upgrade wall — shown in place of locked content (e.g. when a Free
 // user is over their daily search limit, or for the rest of a Lead Gen result set).
 export function UpgradeWall({ title, message }: { title: string; message: string }) {

@@ -20,7 +20,11 @@ function taxBadge(n: number) {
   return <span className="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-700 ring-1 ring-inset ring-amber-600/20">{n}</span>;
 }
 
-function colsFor(kind: Kind): Col[] {
+function colsFor(kind: Kind, fromLead: boolean): Col[] {
+  // Mark profile links opened from Lead Gen so the profile can surface the
+  // (Pro-only) MCA exposure signal — it's a lead-working feature, not shown on
+  // every profile view.
+  const sfx = fromLead ? "?lead=1" : "";
   if (kind === "funder") {
     return [
       { label: "Funder", defaultDir: "asc", val: (r) => s(r.funder).toLowerCase(), render: (r) => <Link href={`/funder/${encodeURIComponent(s(r.funder_norm))}`} className="font-medium text-indigo-700 hover:underline">{s(r.funder)}</Link> },
@@ -28,8 +32,8 @@ function colsFor(kind: Kind): Col[] {
     ];
   }
   const nameCol: Col = kind === "business"
-    ? { label: "Business", defaultDir: "asc", val: (r) => s(r.biz_name).toLowerCase(), render: (r) => <Link href={`/company/${encodeURIComponent(s(r.biz_norm))}`} className="font-medium text-indigo-700 hover:underline">{s(r.biz_name)}</Link> }
-    : { label: "Individual", defaultDir: "asc", val: (r) => s(r.person_name).toLowerCase(), render: (r) => <Link href={`/person/${encodeURIComponent(s(r.person_key))}`} className="font-medium text-indigo-700 hover:underline">{s(r.person_name)}</Link> };
+    ? { label: "Business", defaultDir: "asc", val: (r) => s(r.biz_name).toLowerCase(), render: (r) => <Link href={`/company/${encodeURIComponent(s(r.biz_norm))}${sfx}`} className="font-medium text-indigo-700 hover:underline">{s(r.biz_name)}</Link> }
+    : { label: "Individual", defaultDir: "asc", val: (r) => s(r.person_name).toLowerCase(), render: (r) => <Link href={`/person/${encodeURIComponent(s(r.person_key))}${sfx}`} className="font-medium text-indigo-700 hover:underline">{s(r.person_name)}</Link> };
   return [
     nameCol,
     { label: "Location", defaultDir: "asc", val: (r) => loc(r).toLowerCase(), render: (r) => loc(r) },
@@ -44,8 +48,8 @@ function colsFor(kind: Kind): Col[] {
 
 const PAGE_SIZES = [60, 120, 240, 480];
 
-export function SortableTable({ kind, rows, empty }: { kind: Kind; rows: Row[]; empty?: string }) {
-  const cols = useMemo(() => colsFor(kind), [kind]);
+export function SortableTable({ kind, rows, empty, fromLead = false }: { kind: Kind; rows: Row[]; empty?: string; fromLead?: boolean }) {
+  const cols = useMemo(() => colsFor(kind, fromLead), [kind, fromLead]);
   const [sortIdx, setSortIdx] = useState<number | null>(null);
   const [dir, setDir] = useState<"asc" | "desc">("asc");
   const [page, setPage] = useState(0);

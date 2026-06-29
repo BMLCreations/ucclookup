@@ -194,8 +194,8 @@ export default async function LeadGen({ searchParams }: { searchParams: Promise<
                 ))}
               </div>
               {type === "businesses"
-                ? <SortableTable kind="business" rows={shownBiz} empty="No businesses match these filters." />
-                : <SortableTable kind="individual" rows={shownInds} empty="No individuals match these filters." />}
+                ? <SortableTable kind="business" rows={shownBiz} empty="No businesses match these filters." fromLead />
+                : <SortableTable kind="individual" rows={shownInds} empty="No individuals match these filters." fromLead />}
               {hidden > 0 && (
                 <div className="mt-3"><UpgradeWall title={`${hidden} more results are locked`} message={`Free shows the first ${FREE_LEADGEN_ROWS}. Upgrade to Pro to see all ${total} and export them.`} /></div>
               )}
